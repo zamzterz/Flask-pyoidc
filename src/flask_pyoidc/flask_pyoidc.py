@@ -27,15 +27,18 @@ class OIDCAuthentication(object):
                     provider_configuration_info['issuer'])
 
         self.client_registration_info = client_registration_info or {}
+
+        # setup redirect_uri
+        self.app.add_url_rule('/redirect_uri', 'redirect_uri',
+                              self._handle_authentication_response)
+        with self.app.app_context():
+            self.client_registration_info['redirect_uris'] = url_for('redirect_uri')
+
         if client_registration_info and 'client_id' in client_registration_info:
             # static client info provided
             self.client.store_registration_info(RegistrationRequest(**client_registration_info))
         else:
             # do dynamic registration
-            self.app.add_url_rule('/redirect_uri', 'redirect_uri',
-                                  self._handle_authentication_response)
-            with self.app.app_context():
-                self.client_registration_info['redirect_uris'] = url_for('redirect_uri')
             self.client.register(self.client.provider_info['registration_endpoint'],
                                  **self.client_registration_info)
 
