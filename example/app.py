@@ -1,7 +1,7 @@
 import flask
 from flask import Flask, jsonify
 
-from flask_pyoidc import OIDCAuthentication
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 PORT = 5000
 app = Flask(__name__)
