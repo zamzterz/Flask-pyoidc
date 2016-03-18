@@ -1,6 +1,5 @@
-import functools
-
 import flask
+import functools
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
@@ -12,8 +11,9 @@ from werkzeug.utils import redirect
 
 class OIDCAuthentication(object):
     def __init__(self, flask_app, client_registration_info=None, issuer=None,
-                 provider_configuration_info=None):
+                 provider_configuration_info=None, userinfo_endpoint_method='POST'):
         self.app = flask_app
+        self.userinfo_endpoint_method = userinfo_endpoint_method
 
         self.client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
         if not issuer and not provider_configuration_info:
@@ -88,7 +88,7 @@ class OIDCAuthentication(object):
         access_token = token_resp['access_token']
 
         # do userinfo request
-        userinfo = self.client.do_user_info_request(state=authn_resp['state'])
+        userinfo = self._do_userinfo_request(authn_resp['state'], self.userinfo_endpoint_method)
         if userinfo['sub'] != id_token['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
@@ -98,6 +98,12 @@ class OIDCAuthentication(object):
         flask.g.userinfo = userinfo
 
         return self.callback()
+
+    def _do_userinfo_request(self, state, userinfo_endpoint_method):
+        if userinfo_endpoint_method is None:
+            return None
+
+        return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
 
     def oidc_auth(self, f):
         self.callback = f
