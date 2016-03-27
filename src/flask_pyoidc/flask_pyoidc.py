@@ -11,9 +11,11 @@ from werkzeug.utils import redirect
 
 class OIDCAuthentication(object):
     def __init__(self, flask_app, client_registration_info=None, issuer=None,
-                 provider_configuration_info=None, userinfo_endpoint_method='POST'):
+                 provider_configuration_info=None, userinfo_endpoint_method='POST',
+                 extra_request_args=None):
         self.app = flask_app
         self.userinfo_endpoint_method = userinfo_endpoint_method
+        self.extra_request_args = extra_request_args or {}
 
         self.client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
         if not issuer and not provider_configuration_info:
@@ -59,6 +61,7 @@ class OIDCAuthentication(object):
             'nonce': flask.session['nonce'],
         }
 
+        args.update(self.extra_request_args)
         auth_req = self.client.construct_AuthorizationRequest(request_args=args)
         login_url = auth_req.request(self.client.authorization_endpoint)
         return redirect(login_url)

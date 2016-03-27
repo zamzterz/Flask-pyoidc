@@ -1,4 +1,6 @@
 import json
+from six.moves.urllib.parse import parse_qsl, urlparse
+
 from mock import MagicMock
 
 import flask
@@ -65,3 +67,14 @@ class TestOIDCAuthentication(object):
         authn.client.do_user_info_request = userinfo_request_mock
         authn._do_userinfo_request(state, None)
         assert not userinfo_request_mock.called
+
+    def test_authenticatate_with_extra_request_parameters(self):
+        extra_params = {"foo": "bar", "abc": "xyz"}
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'},
+                                   extra_request_args=extra_params)
+
+        with self.app.test_request_context('/'):
+            a = authn._authenticate()
+        request_params = dict(parse_qsl(urlparse(a.location).query))
+        assert set(extra_params.items()).issubset(set(request_params.items()))
