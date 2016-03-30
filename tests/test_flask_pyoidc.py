@@ -1,4 +1,6 @@
 import json
+
+import time
 from six.moves.urllib.parse import parse_qsl, urlparse
 
 from mock import MagicMock
@@ -78,3 +80,35 @@ class TestOIDCAuthentication(object):
             a = authn._authenticate()
         request_params = dict(parse_qsl(urlparse(a.location).query))
         assert set(extra_params.items()).issubset(set(request_params.items()))
+
+    def test_reauthentication_necessary_with_None(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'})
+        assert authn._reauthentication_necessary(None) is True
+
+    def test_reauthentication_necessary_with_valid_id_token(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'})
+        test_time = 20
+        id_token = {'exp': test_time + 1}
+        assert authn._reauthentication_necessary(id_token, now=test_time) is False
+
+    def test_reauthentication_necessary_with_expired_id_token(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'})
+        test_time = 20
+        id_token = {'exp': test_time - 1}
+        assert authn._reauthentication_necessary(id_token, now=test_time) is True
+
+    def test_dont_reauthenticate_with_valid_id_token(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'})
+        client_mock = MagicMock()
+        callback_mock = MagicMock()
+        authn.client = client_mock
+        authn.callback = callback_mock
+        with self.app.test_request_context('/'):
+            flask.g.id_token = {'exp': time.time() + 25}
+            authn._authenticate()
+        assert not client_mock.construct_AuthorizationRequest.called
+        assert callback_mock.called is True

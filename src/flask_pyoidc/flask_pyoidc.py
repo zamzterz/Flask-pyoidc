@@ -1,5 +1,7 @@
 import flask
 import functools
+
+import time
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
@@ -47,7 +49,7 @@ class OIDCAuthentication(object):
         self.callback = None
 
     def _authenticate(self):
-        if flask.g.get('userinfo', None):
+        if not self._reauthentication_necessary(flask.g.get('id_token')):
             return self.callback()
 
         flask.session['state'] = rndstr()
@@ -107,6 +109,17 @@ class OIDCAuthentication(object):
             return None
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
+
+    def _reauthentication_necessary(self, id_token, now=None):
+        if id_token is None:
+            return True
+
+        id_token_exp = id_token['exp']
+        now_ts = now or time.time()
+        if now_ts > id_token_exp:
+            return True
+
+        return False
 
     def oidc_auth(self, f):
         self.callback = f
