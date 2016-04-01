@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
         name='Flask-pyoidc',
-        version='0.3.1',
+        version='0.4.0',
         packages=find_packages('src'),
         package_dir={'': 'src'},
         url='https://github.com/its-dirg/flask-pyoidc',
