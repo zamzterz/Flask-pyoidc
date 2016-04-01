@@ -105,6 +105,7 @@ class TestOIDCAuthentication(object):
                                    client_registration_info={'client_id': 'foo'})
         client_mock = MagicMock()
         callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
         authn.client = client_mock
         with self.app.test_request_context('/'):
             flask.session['destination'] = '/'
