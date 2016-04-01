@@ -71,7 +71,7 @@ class OIDCAuthentication(object):
         authn_resp = self.client.parse_response(AuthorizationResponse, info=query_string,
                                                 sformat='urlencoded')
 
-        if authn_resp['state'] != flask.session['state']:
+        if authn_resp['state'] != flask.session.pop('state'):
             raise ValueError('The \'state\' parameter does not match.')
 
         # do token request
@@ -85,7 +85,7 @@ class OIDCAuthentication(object):
                                                          request_args=args,
                                                          authn_method='client_secret_basic')
         id_token = token_resp['id_token']
-        if id_token['nonce'] != flask.session['nonce']:
+        if id_token['nonce'] != flask.session.pop('nonce'):
             raise ValueError('The \'nonce\' parameter does not match.')
         access_token = token_resp['access_token']
 
