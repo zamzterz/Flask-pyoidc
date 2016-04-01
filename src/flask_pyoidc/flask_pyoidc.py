@@ -6,7 +6,7 @@ from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
 from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, \
-    AuthorizationResponse
+    AuthorizationResponse, IdToken, OpenIDSchema
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
 
@@ -46,12 +46,9 @@ class OIDCAuthentication(object):
             self.client.register(self.client.provider_info['registration_endpoint'],
                                  **self.client_registration_info)
 
-        self.callback = None
 
     def _authenticate(self):
-        if not self._reauthentication_necessary(flask.g.get('id_token')):
-            return self.callback()
-
+        flask.session['destination'] = flask.request.url
         flask.session['state'] = rndstr()
         flask.session['nonce'] = rndstr()
         args = {
@@ -97,12 +94,14 @@ class OIDCAuthentication(object):
         if userinfo['sub'] != id_token['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
-        # store the current user
-        flask.g.id_token = id_token
-        flask.g.access_token = access_token
-        flask.g.userinfo = userinfo
+        # store the current user session
+        flask.session['id_token'] = id_token.to_dict()
+        flask.session['access_token'] = access_token
+        if userinfo:
+            flask.session['userinfo'] = userinfo.to_dict()
 
-        return self.callback()
+        destination = flask.session.pop('destination')
+        return redirect(destination)
 
     def _do_userinfo_request(self, state, userinfo_endpoint_method):
         if userinfo_endpoint_method is None:
@@ -121,11 +120,21 @@ class OIDCAuthentication(object):
 
         return False
 
-    def oidc_auth(self, f):
-        self.callback = f
-
-        @functools.wraps(f)
+    def oidc_auth(self, view_func):
+        @functools.wraps(view_func)
         def wrapper():
+            if not self._reauthentication_necessary(flask.session.get('id_token')):
+                # fetch user session and make accessible for view function
+                self._unpack_user_session()
+                return view_func()
+
             return self._authenticate()
 
         return wrapper
+
+    def _unpack_user_session(self):
+        flask.g.id_token = IdToken().from_dict(flask.session.get('id_token'))
+        flask.g.access_token = flask.session.get('access_token')
+        userinfo_dict = flask.session.get('userinfo')
+        if userinfo_dict:
+            flask.g.userinfo = OpenIDSchema().from_dict(userinfo_dict)

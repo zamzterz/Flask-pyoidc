@@ -9,7 +9,7 @@ import flask
 import pytest
 import responses
 from flask import Flask
-from oic.oic.message import IdToken
+from oic.oic.message import IdToken, OpenIDSchema
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
@@ -51,12 +51,12 @@ class TestOIDCAuthentication(object):
         authn.client.do_access_token_request = MagicMock(
                 return_value={'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
                               'access_token': 'access_token'})
-        authn.callback = MagicMock()
-        userinfo_request_mock = MagicMock(return_value={'sub': sub})
+        userinfo_request_mock = MagicMock(return_value=OpenIDSchema(**{'sub': sub}))
         authn.client.do_user_info_request = userinfo_request_mock
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
             flask.session['state'] = state
             flask.session['nonce'] = nonce
+            flask.session['destination'] = '/'
             authn._handle_authentication_response()
         userinfo_request_mock.assert_called_with(method=method, state=state)
 
@@ -106,9 +106,9 @@ class TestOIDCAuthentication(object):
         client_mock = MagicMock()
         callback_mock = MagicMock()
         authn.client = client_mock
-        authn.callback = callback_mock
         with self.app.test_request_context('/'):
-            flask.g.id_token = {'exp': time.time() + 25}
-            authn._authenticate()
+            flask.session['destination'] = '/'
+            flask.session['id_token'] = {'exp': time.time() + 25}
+            authn.oidc_auth(callback_mock)()
         assert not client_mock.construct_AuthorizationRequest.called
         assert callback_mock.called is True
