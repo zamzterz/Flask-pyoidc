@@ -1,7 +1,6 @@
 import flask
 import functools
 
-import time
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
@@ -78,8 +77,6 @@ class OIDCAuthentication(object):
         args = {
             'code': authn_resp['code'],
             'redirect_uri': self.client.registration_response['redirect_uris'][0],
-            'client_id': self.client.client_id,
-            'client_secret': self.client.client_secret
         }
         token_resp = self.client.do_access_token_request(scope='openid', state=authn_resp['state'],
                                                          request_args=args,
