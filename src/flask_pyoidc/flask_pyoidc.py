@@ -109,16 +109,8 @@ class OIDCAuthentication(object):
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
 
-    def _reauthentication_necessary(self, id_token, now=None):
-        if id_token is None:
-            return True
-
-        id_token_exp = id_token['exp']
-        now_ts = now or time.time()
-        if now_ts > id_token_exp:
-            return True
-
-        return False
+    def _reauthentication_necessary(self, id_token):
+        return not id_token
 
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
@@ -133,8 +125,8 @@ class OIDCAuthentication(object):
         return wrapper
 
     def _unpack_user_session(self):
-        flask.g.id_token = IdToken().from_dict(flask.session.get('id_token'))
-        flask.g.access_token = flask.session.get('access_token')
-        userinfo_dict = flask.session.get('userinfo')
+        flask.g.id_token = IdToken().from_dict(flask.session.pop('id_token'))
+        flask.g.access_token = flask.session.pop('access_token', None)
+        userinfo_dict = flask.session.pop('userinfo', None)
         if userinfo_dict:
             flask.g.userinfo = OpenIDSchema().from_dict(userinfo_dict)

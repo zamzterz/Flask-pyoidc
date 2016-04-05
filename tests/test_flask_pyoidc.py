@@ -90,15 +90,8 @@ class TestOIDCAuthentication(object):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
                                    client_registration_info={'client_id': 'foo'})
         test_time = 20
-        id_token = {'exp': test_time + 1}
-        assert authn._reauthentication_necessary(id_token, now=test_time) is False
-
-    def test_reauthentication_necessary_with_expired_id_token(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'})
-        test_time = 20
-        id_token = {'exp': test_time - 1}
-        assert authn._reauthentication_necessary(id_token, now=test_time) is True
+        id_token = {'iss': ISSUER}
+        assert authn._reauthentication_necessary(id_token) is False
 
     def test_dont_reauthenticate_with_valid_id_token(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
