@@ -12,7 +12,7 @@ matrix:
       env: TOXENV=py27
 
 install:
-  - pip install -U tox pytest-cov
+  - pip install -U tox
 
 script:
   - tox
