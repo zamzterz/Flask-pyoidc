@@ -1,0 +1,12 @@
+[run]
+branch = True
+source = src/flask_pyoidc/
+
+[report]
+exclude_lines =
+    raise NotImplementedError()
+    if __name__ == .__main__.: 
+ignore_errors = True
+omit =
+    tests/*
+    setup.py

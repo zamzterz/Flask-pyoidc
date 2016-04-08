@@ -5,3 +5,5 @@ dist/
 .idea/
 .tox/
 .cache/
+.coverage
+coverage.xml
