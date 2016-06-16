@@ -80,7 +80,8 @@ class OIDCAuthentication(object):
         }
         token_resp = self.client.do_access_token_request(scope='openid', state=authn_resp['state'],
                                                          request_args=args,
-                                                         authn_method='client_secret_basic')
+                                                         authn_method=self.client.registration_response.get(
+                                                             'token_endpoint_auth_method', 'client_secret_basic'))
         id_token = token_resp['id_token']
         if id_token['nonce'] != flask.session.pop('nonce'):
             raise ValueError('The \'nonce\' parameter does not match.')
