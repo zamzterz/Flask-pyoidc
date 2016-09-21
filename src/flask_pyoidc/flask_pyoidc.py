@@ -78,7 +78,7 @@ class OIDCAuthentication(object):
             'code': authn_resp['code'],
             'redirect_uri': self.client.registration_response['redirect_uris'][0],
         }
-        token_resp = self.client.do_access_token_request(scope='openid', state=authn_resp['state'],
+        token_resp = self.client.do_access_token_request(state=authn_resp['state'],
                                                          request_args=args,
                                                          authn_method=self.client.registration_response.get(
                                                              'token_endpoint_auth_method', 'client_secret_basic'))
