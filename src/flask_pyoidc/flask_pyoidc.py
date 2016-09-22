@@ -131,12 +131,11 @@ class OIDCAuthentication(object):
         return wrapper
 
     def _unpack_user_session(self):
-        flask.g.id_token = IdToken().from_dict(flask.session.pop('id_token'))
-        flask.g.access_token = flask.session.pop('access_token', None)
-        userinfo_dict = flask.session.pop('userinfo', None)
+        flask.g.id_token = IdToken().from_dict(flask.session.get('id_token'))
+        flask.g.access_token = flask.session.get('access_token', None)
+        userinfo_dict = flask.session.get('userinfo', None)
         if userinfo_dict:
             flask.g.userinfo = OpenIDSchema().from_dict(userinfo_dict)
-
     def _logout(self):
         id_token_jwt = flask.session['id_token_jwt']
         flask.session.clear()
