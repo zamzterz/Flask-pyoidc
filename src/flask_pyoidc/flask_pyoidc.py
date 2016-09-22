@@ -112,11 +112,11 @@ class OIDCAuthentication(object):
 
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
-        def wrapper():
+        def wrapper(*args, **kwargs):
             if not self._reauthentication_necessary(flask.session.get('id_token')):
                 # fetch user session and make accessible for view function
                 self._unpack_user_session()
-                return view_func()
+                return view_func(*args, **kwargs)
 
             return self._authenticate()
 
