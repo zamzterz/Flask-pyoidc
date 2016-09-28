@@ -1,6 +1,6 @@
-import flask
 import functools
 
+import flask
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
@@ -21,13 +21,13 @@ class OIDCAuthentication(object):
         self.client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
         if not issuer and not provider_configuration_info:
             raise ValueError(
-                    'Either \'issuer\' (for dynamic discovery) or \'provider_configuration_info\' (for static configuration must be specified.')
+                'Either \'issuer\' (for dynamic discovery) or \'provider_configuration_info\' (for static configuration must be specified.')
         if issuer and not provider_configuration_info:
             self.client.provider_config(issuer)
         else:
             self.client.handle_provider_config(
-                    ProviderConfigurationResponse(**provider_configuration_info),
-                    provider_configuration_info['issuer'])
+                ProviderConfigurationResponse(**provider_configuration_info),
+                provider_configuration_info['issuer'])
 
         self.client_registration_info = client_registration_info or {}
 
@@ -44,7 +44,6 @@ class OIDCAuthentication(object):
             # do dynamic registration
             self.client.register(self.client.provider_info['registration_endpoint'],
                                  **self.client_registration_info)
-
 
     def _authenticate(self):
         flask.session['destination'] = flask.request.url

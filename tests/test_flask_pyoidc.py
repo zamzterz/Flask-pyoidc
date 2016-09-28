@@ -1,15 +1,13 @@
 import json
-
 import time
-from six.moves.urllib.parse import parse_qsl, urlparse
-
-from mock import MagicMock
 
 import flask
 import pytest
 import responses
 from flask import Flask
+from mock import MagicMock
 from oic.oic.message import IdToken, OpenIDSchema
+from six.moves.urllib.parse import parse_qsl, urlparse
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
@@ -49,8 +47,8 @@ class TestOIDCAuthentication(object):
                                    client_registration_info={'client_id': 'foo'},
                                    userinfo_endpoint_method=method)
         authn.client.do_access_token_request = MagicMock(
-                return_value={'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
-                              'access_token': 'access_token'})
+            return_value={'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
+                          'access_token': 'access_token'})
         userinfo_request_mock = MagicMock(return_value=OpenIDSchema(**{'sub': sub}))
         authn.client.do_user_info_request = userinfo_request_mock
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
@@ -89,7 +87,6 @@ class TestOIDCAuthentication(object):
     def test_reauthentication_necessary_with_valid_id_token(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
                                    client_registration_info={'client_id': 'foo'})
-        test_time = 20
         id_token = {'iss': ISSUER}
         assert authn._reauthentication_necessary(id_token) is False
 
