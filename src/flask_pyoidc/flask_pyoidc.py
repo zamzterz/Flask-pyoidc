@@ -5,7 +5,7 @@ from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
 from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, \
-    AuthorizationResponse, IdToken, OpenIDSchema
+    AuthorizationResponse, IdToken, OpenIDSchema, EndSessionRequest
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
 
@@ -40,12 +40,20 @@ class OIDCAuthentication(object):
         if client_registration_info and 'client_id' in client_registration_info:
             # static client info provided
             self.client.store_registration_info(RegistrationRequest(**client_registration_info))
-        else:
+
+        self.logout_view = None
+
+    def _authenticate(self):
+        if 'client_id' not in self.client_registration_info:
             # do dynamic registration
+            if self.logout_view:
+                # handle support for logout
+                with self.app.app_context():
+                    self.client_registration_info['post_logout_redirect_uris'] = [url_for(self.logout_view.__name__,
+                                                                                          _external=True)]
             self.client.register(self.client.provider_info['registration_endpoint'],
                                  **self.client_registration_info)
 
-    def _authenticate(self):
         flask.session['destination'] = flask.request.url
         flask.session['state'] = rndstr()
         flask.session['nonce'] = rndstr()
@@ -93,6 +101,7 @@ class OIDCAuthentication(object):
 
         # store the current user session
         flask.session['id_token'] = id_token.to_dict()
+        flask.session['id_token_jwt'] = id_token.jwt
         flask.session['access_token'] = access_token
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
@@ -127,3 +136,35 @@ class OIDCAuthentication(object):
         userinfo_dict = flask.session.pop('userinfo', None)
         if userinfo_dict:
             flask.g.userinfo = OpenIDSchema().from_dict(userinfo_dict)
+
+    def _logout(self):
+        id_token_jwt = flask.session['id_token_jwt']
+        flask.session.clear()
+
+        if 'end_session_endpoint' in self.client.provider_info:
+            flask.session['end_session_state'] = rndstr()
+            end_session_request = EndSessionRequest(
+                id_token_hint=id_token_jwt,
+                post_logout_redirect_uri=self.client_registration_info['post_logout_redirect_uris'][0],
+                state=flask.session['end_session_state'])
+            return redirect(end_session_request.request(self.client.provider_info['end_session_endpoint']), 303)
+
+        return None
+
+    def oidc_logout(self, view_func):
+        self.logout_view = view_func
+
+        @functools.wraps(view_func)
+        def wrapper(*args, **kwargs):
+            if 'state' in flask.request.args:
+                # returning redirect from provider
+                assert flask.request.args['state'] == flask.session.pop('end_session_state')
+                return view_func(*args, **kwargs)
+
+            redirect_to_provider = self._logout()
+            if redirect_to_provider:
+                return redirect_to_provider
+
+            return view_func(*args, **kwargs)
+
+        return wrapper

@@ -103,3 +103,97 @@ class TestOIDCAuthentication(object):
             authn.oidc_auth(callback_mock)()
         assert not client_mock.construct_AuthorizationRequest.called
         assert callback_mock.called is True
+
+    def test_logout(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        post_logout_uri = 'https://client.example.com/post_logout'
+        authn = OIDCAuthentication(self.app,
+                                   provider_configuration_info={'issuer': ISSUER,
+                                                                'end_session_endpoint': end_session_endpoint},
+                                   client_registration_info={'client_id': 'foo',
+                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        with self.app.test_request_context('/logout'):
+            flask.session['access_token'] = 'abcde'
+            flask.session['userinfo'] = {'foo': 'bar', 'abc': 'xyz'}
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            end_session_redirect = authn._logout()
+
+            assert all(k not in flask.session for k in ['access_token', 'userinfo', 'id_token', 'id_token_jwt'])
+
+            assert end_session_redirect.status_code == 303
+            assert end_session_redirect.headers['Location'].startswith(end_session_endpoint)
+            parsed_request = dict(parse_qsl(urlparse(end_session_redirect.headers['Location']).query))
+            assert parsed_request['state'] == flask.session['end_session_state']
+            assert parsed_request['id_token_hint'] == id_token.to_jwt()
+            assert parsed_request['post_logout_redirect_uri'] == post_logout_uri
+
+    def test_logout_handles_provider_without_end_session_endpoint(self):
+        post_logout_uri = 'https://client.example.com/post_logout'
+        authn = OIDCAuthentication(self.app,
+                                   provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo',
+                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        with self.app.test_request_context('/logout'):
+            flask.session['access_token'] = 'abcde'
+            flask.session['userinfo'] = {'foo': 'bar', 'abc': 'xyz'}
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            end_session_redirect = authn._logout()
+
+            assert all(k not in flask.session for k in ['access_token', 'userinfo', 'id_token', 'id_token_jwt'])
+            assert end_session_redirect is None
+
+    def test_oidc_logout_redirects_to_provider(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        post_logout_uri = 'https://client.example.com/post_logout'
+        authn = OIDCAuthentication(self.app,
+                                   provider_configuration_info={'issuer': ISSUER,
+                                                                'end_session_endpoint': end_session_endpoint},
+                                   client_registration_info={'client_id': 'foo',
+                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        with self.app.test_request_context('/logout'):
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            resp = authn.oidc_logout(callback_mock)()
+        assert resp.status_code == 303
+        assert not callback_mock.called
+
+    def test_oidc_logout_redirects_to_provider(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        post_logout_uri = 'https://client.example.com/post_logout'
+        authn = OIDCAuthentication(self.app,
+                                   provider_configuration_info={'issuer': ISSUER,
+                                                                'end_session_endpoint': end_session_endpoint},
+                                   client_registration_info={'client_id': 'foo',
+                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        with self.app.test_request_context('/logout'):
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            resp = authn.oidc_logout(callback_mock)()
+            assert authn.logout_view == callback_mock
+        assert resp.status_code == 303
+        assert not callback_mock.called
+
+    def test_oidc_logout_handles_redirects_from_provider(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        post_logout_uri = 'https://client.example.com/post_logout'
+        authn = OIDCAuthentication(self.app,
+                                   provider_configuration_info={'issuer': ISSUER,
+                                                                'end_session_endpoint': end_session_endpoint},
+                                   client_registration_info={'client_id': 'foo',
+                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
+        state = 'end_session_123'
+        with self.app.test_request_context('/logout?state=' + state):
+            flask.session['end_session_state'] = state
+            authn.oidc_logout(callback_mock)()
+            assert 'end_session_state' not in flask.session
+        assert callback_mock.called

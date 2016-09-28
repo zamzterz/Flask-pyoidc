@@ -18,5 +18,11 @@ def index():
                    userinfo=flask.g.userinfo.to_dict())
 
 
+@app.route('/logout')
+@auth.oidc_logout
+def logout():
+    return 'You\'ve been successfully logged out!'
+
+
 if __name__ == '__main__':
     app.run(port=PORT)
