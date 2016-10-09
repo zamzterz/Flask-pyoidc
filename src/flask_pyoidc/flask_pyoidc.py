@@ -124,6 +124,11 @@ class OIDCAuthentication(object):
             if not self._reauthentication_necessary(flask.session.get('id_token')):
                 # fetch user session and make accessible for view function
                 self._unpack_user_session()
+
+                # make the session permanent if the user has chosen to configure a custom lifetime
+                if self.app.config.get('PERMANENT_SESSION', False):
+                    flask.session.permanent = True
+
                 return view_func(*args, **kwargs)
 
             return self._authenticate()
