@@ -21,9 +21,20 @@ any way with the different client registration modes.
   about the client. The `redirect_uris` registered with the provider MUST include
   `<flask_url>/redirect_uri`, where `<flask_url>` is the URL for the Flask application.
 
+## Configuration
+
 The application using this extension MUST set the following [builtin configuration values of Flask](http://flask.pocoo.org/docs/0.10/config/#builtin-configuration-values):
 
-* `SERVER_NAME` (MUST be the same as `<flask_url>` if using static client registration
-* `SECRET_KEY` (this extension relies on Flask session, which requires `SECRET_KEY`)
+* `SERVER_NAME` (MUST be the same as `<flask_url>` if using static client registration)
+* `SECRET_KEY` (this extension relies on [Flask sessions](http://flask.pocoo.org/docs/0.11/quickstart/#sessions), which requires `SECRET_KEY`)
+
+You may also configure the way Flask sessions handles the user session:
+
+* `PERMANENT_SESSION` (added by this extension; makes the session cookie expire after a configurable length of time instead of being tied to the browser session)
+* `PERMANENT_SESSION_LIFETIME` (the lifetime of a permanent session)
+
+See the [Flask documentation](http://flask.pocoo.org/docs/0.11/config/#builtin-configuration-values) for an exhaustive list of configuration options.
+
+## Example
 
 Have a look at the example Flask app in [app.py](example/app.py) for an idea of how to use it.

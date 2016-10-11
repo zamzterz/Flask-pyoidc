@@ -4,8 +4,7 @@ import flask
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic import Client
-from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, \
-    AuthorizationResponse, IdToken, OpenIDSchema, EndSessionRequest
+from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, AuthorizationResponse, EndSessionRequest
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
 
@@ -122,20 +121,15 @@ class OIDCAuthentication(object):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
             if not self._reauthentication_necessary(flask.session.get('id_token')):
-                # fetch user session and make accessible for view function
-                self._unpack_user_session()
+                # make the session permanent if the user has chosen to configure a custom lifetime
+                if self.app.config.get('PERMANENT_SESSION', False):
+                    flask.session.permanent = True
+
                 return view_func(*args, **kwargs)
 
             return self._authenticate()
 
         return wrapper
-
-    def _unpack_user_session(self):
-        flask.g.id_token = IdToken().from_dict(flask.session.pop('id_token'))
-        flask.g.access_token = flask.session.pop('access_token', None)
-        userinfo_dict = flask.session.pop('userinfo', None)
-        if userinfo_dict:
-            flask.g.userinfo = OpenIDSchema().from_dict(userinfo_dict)
 
     def _logout(self):
         id_token_jwt = flask.session['id_token_jwt']
