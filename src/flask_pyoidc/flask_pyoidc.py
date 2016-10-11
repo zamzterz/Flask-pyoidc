@@ -8,6 +8,7 @@ from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, 
     AuthorizationResponse, IdToken, OpenIDSchema, EndSessionRequest
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
+from jwkest.jws import alg2keytype
 
 
 class OIDCAuthentication(object):
@@ -71,6 +72,12 @@ class OIDCAuthentication(object):
         login_url = auth_req.request(self.client.authorization_endpoint)
         return redirect(login_url)
 
+    def _id_token_as_signed_jwt(self, id_token, alg="RS256"):
+        # Produce a JWS, a signed JWT, containing a previously received ID token
+        ckey = self.client.keyjar.get_signing_key(alg2keytype(alg), "")
+        _signed_jwt = id_token.to_jwt(key=ckey, algorithm=alg)
+        return _signed_jwt
+
     def _handle_authentication_response(self):
         # parse authentication response
         query_string = flask.request.query_string.decode('utf-8')
@@ -101,7 +108,7 @@ class OIDCAuthentication(object):
 
         # store the current user session
         flask.session['id_token'] = id_token.to_dict()
-        flask.session['id_token_jwt'] = id_token.jwt
+        flask.session['id_token_jwt'] = self._id_token_as_signed_jwt(id_token, "HS256")
         flask.session['access_token'] = access_token
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
