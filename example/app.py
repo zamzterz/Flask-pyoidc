@@ -14,8 +14,8 @@ auth = OIDCAuthentication(app, issuer="https://localhost:50009")
 @app.route('/')
 @auth.oidc_auth
 def index():
-    return jsonify(id_token=flask.g.id_token.to_dict(), access_token=flask.g.access_token,
-                   userinfo=flask.g.userinfo.to_dict())
+    return jsonify(id_token=flask.session['id_token'], access_token=flask.session['access_token'],
+                   userinfo=flask.session['userinfo'])
 
 
 @app.route('/logout')
