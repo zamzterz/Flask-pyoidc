@@ -104,6 +104,17 @@ class TestOIDCAuthentication(object):
         assert not client_mock.construct_AuthorizationRequest.called
         assert callback_mock.called is True
 
+    def test_handle_authentication_error_response_by_redirect_to_view(self):
+        view_endpoint = '/view-endpoint'
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info={'client_id': 'foo'})
+        with self.app.test_request_context('/redirect_uri?error=invalid_request&error_description=test_error'):
+            flask.session['destination'] = view_endpoint
+            response = authn._handle_authentication_response()
+
+        assert response.status_code == 302
+        assert response.location == view_endpoint
+
     def test_logout(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         post_logout_uri = 'https://client.example.com/post_logout'
