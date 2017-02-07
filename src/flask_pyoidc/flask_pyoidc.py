@@ -76,9 +76,6 @@ class OIDCAuthentication(object):
         authn_resp = self.client.parse_response(AuthorizationResponse, info=query_string,
                                                 sformat='urlencoded')
 
-        if 'error' in authn_resp:
-            return self._return_to_view()
-
         if authn_resp['state'] != flask.session.pop('state'):
             raise ValueError('The \'state\' parameter does not match.')
 
@@ -108,17 +105,14 @@ class OIDCAuthentication(object):
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
 
-        return self._return_to_view()
+        destination = flask.session.pop('destination')
+        return redirect(destination)
 
     def _do_userinfo_request(self, state, userinfo_endpoint_method):
         if userinfo_endpoint_method is None:
             return None
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
-
-    def _return_to_view(self):
-        destination = flask.session.pop('destination')
-        return redirect(destination)
 
     def _reauthentication_necessary(self, id_token):
         return not id_token
