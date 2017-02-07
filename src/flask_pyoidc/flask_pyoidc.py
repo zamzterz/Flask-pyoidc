@@ -45,13 +45,14 @@ class OIDCAuthentication(object):
     def _authenticate(self):
         if 'client_id' not in self.client_registration_info:
             # do dynamic registration
-            if self.logout_view:
-                # handle support for logout
-                with self.app.app_context():
-                    self.client_registration_info['post_logout_redirect_uris'] = [url_for(self.logout_view.__name__,
-                                                                                          _external=True)]
             self.client.register(self.client.provider_info['registration_endpoint'],
                                  **self.client_registration_info)
+
+        if self.logout_view:
+            # handle support for logout
+            with self.app.app_context():
+                self.client_registration_info['post_logout_redirect_uris'] = [url_for(self.logout_view.__name__,
+                                                                                      _external=True)]
 
         flask.session['destination'] = flask.request.url
         flask.session['state'] = rndstr()
