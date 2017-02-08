@@ -100,7 +100,7 @@ class OIDCAuthentication(object):
 
         # do userinfo request
         userinfo = self._do_userinfo_request(authn_resp['state'], self.userinfo_endpoint_method)
-        if id_token and userinfo['sub'] != id_token['sub']:
+        if id_token and userinfo and userinfo['sub'] != id_token['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
         # store the current user session
