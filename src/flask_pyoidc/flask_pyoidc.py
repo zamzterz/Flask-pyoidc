@@ -88,20 +88,22 @@ class OIDCAuthentication(object):
                                                          request_args=args,
                                                          authn_method=self.client.registration_response.get(
                                                              'token_endpoint_auth_method', 'client_secret_basic'))
-        id_token = token_resp['id_token']
-        if id_token['nonce'] != flask.session.pop('nonce'):
-            raise ValueError('The \'nonce\' parameter does not match.')
-        access_token = token_resp['access_token']
+        flask.session['access_token'] = token_resp['access_token']
+
+        id_token = None
+        if 'id_token' in token_resp:
+            id_token = token_resp['id_token']
+            if id_token['nonce'] != flask.session.pop('nonce'):
+                raise ValueError('The \'nonce\' parameter does not match.')
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.jwt
 
         # do userinfo request
         userinfo = self._do_userinfo_request(authn_resp['state'], self.userinfo_endpoint_method)
-        if userinfo['sub'] != id_token['sub']:
+        if id_token and userinfo['sub'] != id_token['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
         # store the current user session
-        flask.session['id_token'] = id_token.to_dict()
-        flask.session['id_token_jwt'] = id_token.jwt
-        flask.session['access_token'] = access_token
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
 
@@ -114,13 +116,13 @@ class OIDCAuthentication(object):
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
 
-    def _reauthentication_necessary(self, id_token):
-        return not id_token
+    def _reauthentication_necessary(self, access_token):
+        return not access_token
 
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
-            if not self._reauthentication_necessary(flask.session.get('id_token')):
+            if not self._reauthentication_necessary(flask.session.get('access_token')):
                 # make the session permanent if the user has chosen to configure a custom lifetime
                 if self.app.config.get('PERMANENT_SESSION', False):
                     flask.session.permanent = True

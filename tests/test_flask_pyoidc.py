@@ -84,11 +84,11 @@ class TestOIDCAuthentication(object):
                                    client_registration_info={'client_id': 'foo'})
         assert authn._reauthentication_necessary(None) is True
 
-    def test_reauthentication_necessary_with_valid_id_token(self):
+    def test_reauthentication_necessary_with_valid_access_token(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
                                    client_registration_info={'client_id': 'foo'})
-        id_token = {'iss': ISSUER}
-        assert authn._reauthentication_necessary(id_token) is False
+        access_token = 'test token'
+        assert authn._reauthentication_necessary(access_token) is False
 
     def test_dont_reauthenticate_with_valid_id_token(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
@@ -99,7 +99,7 @@ class TestOIDCAuthentication(object):
         authn.client = client_mock
         with self.app.test_request_context('/'):
             flask.session['destination'] = '/'
-            flask.session['id_token'] = {'exp': time.time() + 25}
+            flask.session['access_token'] = 'test token'
             authn.oidc_auth(callback_mock)()
         assert not client_mock.construct_AuthorizationRequest.called
         assert callback_mock.called is True
