@@ -24,5 +24,10 @@ def logout():
     return 'You\'ve been successfully logged out!'
 
 
+@auth.error_view
+def error(error=None, error_description=None):
+    return jsonify({'error': error, 'message': error_description})
+
+
 if __name__ == '__main__':
     app.run(port=PORT)

@@ -7,7 +7,7 @@ import responses
 from flask import Flask
 from mock import MagicMock
 from oic.oic.message import IdToken, OpenIDSchema
-from six.moves.urllib.parse import parse_qsl, urlparse
+from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
@@ -197,3 +197,63 @@ class TestOIDCAuthentication(object):
             authn.oidc_logout(callback_mock)()
             assert 'end_session_state' not in flask.session
         assert callback_mock.called
+
+    def test_authentication_error_reponse_calls_to_error_view_if_set(self):
+        state = 'test_tate'
+        error_response = {'error': 'invalid_request', 'error_description': 'test error'}
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        error_view_mock = MagicMock()
+        authn._error_view = error_view_mock
+        with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(
+                error=urlencode(error_response), state=state)):
+            flask.session['state'] = state
+            authn._handle_authentication_response()
+        error_view_mock.assert_called_with(**error_response)
+
+    def test_authentication_error_reponse_returns_default_error_if_no_error_view_set(self):
+        state = 'test_tate'
+        error_response = {'error': 'invalid_request', 'error_description': 'test error'}
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(
+                error=urlencode(error_response), state=state)):
+            flask.session['state'] = state
+            response = authn._handle_authentication_response()
+        assert response == 'Something went wrong with the authentication, please try to login again.'
+
+    @responses.activate
+    def test_token_error_reponse_calls_to_error_view_if_set(self):
+        token_endpoint = ISSUER + '/token'
+        error_response = {'error': 'invalid_request', 'error_description': 'test error'}
+        responses.add(responses.POST, token_endpoint,
+                      body=json.dumps(error_response),
+                      content_type='application/json')
+
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER,
+                                                                          'token_endpoint': token_endpoint},
+                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        error_view_mock = MagicMock()
+        authn._error_view = error_view_mock
+        state = 'test_tate'
+        with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
+            flask.session['state'] = state
+            authn._handle_authentication_response()
+        error_view_mock.assert_called_with(**error_response)
+
+    @responses.activate
+    def test_token_error_reponse_returns_default_error_if_no_error_view_set(self):
+        token_endpoint = ISSUER + '/token'
+        error_response = {'error': 'invalid_request', 'error_description': 'test error'}
+        responses.add(responses.POST, token_endpoint,
+                      body=json.dumps(error_response),
+                      content_type='application/json')
+
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER,
+                                                                          'token_endpoint': token_endpoint},
+                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        state = 'test_tate'
+        with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
+            flask.session['state'] = state
+            response = authn._handle_authentication_response()
+        assert response == 'Something went wrong with the authentication, please try to login again.'

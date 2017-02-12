@@ -41,6 +41,7 @@ class OIDCAuthentication(object):
             self.client.store_registration_info(RegistrationRequest(**client_registration_info))
 
         self.logout_view = None
+        self._error_view = None
 
     def _authenticate(self):
         if 'client_id' not in self.client_registration_info:
@@ -79,6 +80,9 @@ class OIDCAuthentication(object):
         if authn_resp['state'] != flask.session.pop('state'):
             raise ValueError('The \'state\' parameter does not match.')
 
+        if 'error' in authn_resp:
+            return self._handle_error_response(authn_resp)
+
         # do token request
         args = {
             'code': authn_resp['code'],
@@ -88,6 +92,9 @@ class OIDCAuthentication(object):
                                                          request_args=args,
                                                          authn_method=self.client.registration_response.get(
                                                              'token_endpoint_auth_method', 'client_secret_basic'))
+        if 'error' in token_resp:
+            return self._handle_error_response(token_resp)
+
         flask.session['access_token'] = token_resp['access_token']
 
         id_token = None
@@ -115,6 +122,13 @@ class OIDCAuthentication(object):
             return None
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
+
+    def _handle_error_response(self, error_response):
+        if self._error_view:
+            error = {k: error_response[k] for k in ['error', 'error_description'] if k in error_response}
+            return self._error_view(**error)
+
+        return 'Something went wrong with the authentication, please try to login again.'
 
     def _reauthentication_necessary(self, access_token):
         return not access_token
@@ -164,3 +178,7 @@ class OIDCAuthentication(object):
             return view_func(*args, **kwargs)
 
         return wrapper
+
+    def error_view(self, view_func):
+        self._error_view = view_func
+        return view_func
