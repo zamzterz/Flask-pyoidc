@@ -3,23 +3,113 @@
 [![PyPI](https://img.shields.io/pypi/v/flask-pyoidc.svg)](https://pypi.python.org/pypi/Flask-pyoidc)
 [![codecov.io](https://codecov.io/github/its-dirg/Flask-pyoidc/coverage.svg?branch=master)](https://codecov.io/github/its-dirg/Flask-pyoidc?branch=master)
 
-This repository contains an example of how to use the [pyoidc](https://github.com/rohe/pyoidc)
-library to provide simple OpenID Connect authentication (using the ["Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)).
+This Flask extension provides simple OpenID Connect authentication, by using [pyoidc](https://github.com/rohe/pyoidc).
+Currently only ["Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)) is supported.
 
 ## Usage
 
-The extension support both static and dynamic provider configuration discovery as well as static
-and dynamic client registration. The different modes of provider configuration can be combined in
-any way with the different client registration modes.
+### Provider and client configuration
 
-* Static provider configuration: `OIDCAuthentication(provider_configuration_info=provider_config)`,
-  where `provider_config` is a dictionary containing the [provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
-* Dynamic provider configuration: `OIDCAuthentication(issuer=issuer_url)`, where `issuer_url`
-  is the issuer URL of the provider.
-* Static client registration: `OIDCAuthentication(client_registration_info=client_info)`, where
-  `client_info` is all the [registered metadata](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationResponse)
-  about the client. The `redirect_uris` registered with the provider MUST include
-  `<flask_url>/redirect_uri`, where `<flask_url>` is the URL for the Flask application.
+Both static and dynamic provider configuration discovery, as well as static
+and dynamic client registration, is supported. The different modes of provider configuration can be combined with any
+of the client registration modes.
+
+#### Dynamic provider configuration
+
+To use a provider which supports dynamic discovery it suffices to specify the issuer URL:
+```python
+auth = OIDCAuthentication(issuer='https://op.example.com')
+```
+
+#### Static provider configuration
+
+To use a provider not supporting dynamic discovery, the static provider configuration can be specified:
+```python
+provider_config = {
+    'issuer': 'https://op.example.com',
+    'authorization_endpoint': 'https://op.example.com/authorize',
+    'token_endpoint': 'https://op.example.com/token',
+    'userinfo_endpoint': 'https://op.example.com/userinfo'
+}
+auth = OIDCAuthentication(provider_configuration_info=provider_config)
+```
+
+See the OpenID Connect specification for more information about the
+[provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
+
+
+#### Static client registration
+
+If you have already registered a client with the provider all client registration information can be specified:
+```python
+client_info = {
+    'client_id': 'cl41ekfb9j',
+    'client_secret': 'm1C659wLipXfUUR50jlZ',
+
+}
+auth = OIDCAuthentication(client_registration_info=client_info)
+```
+
+**Note: The redirect URIs registered with the provider MUST include `<application_url>/redirect_uri`,
+where `<application_url>` is the URL for the Flask application.**
+
+#### Dynamic client registration
+
+If no `client_id` is specified in the `client_registration_info` constructor parameter, the library will try to
+dynamically register a client with the specified provider.
+
+### Protect an endpoint by authentication
+
+To add authentication to one of your endpoints use the `oidc_auth` decorator:
+```python
+import flask
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route('/')
+@auth.oidc_auth
+def index():
+    return jsonify(id_token=flask.session['id_token'], access_token=flask.session['access_token'],
+                   userinfo=flask.session['userinfo'])
+```
+
+This extension will place three things in the session if they are received from the provider:
+* [ID Token](http://openid.net/specs/openid-connect-core-1_0.html#IDToken)
+* [access token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
+* [userinfo response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
+  
+### User logout
+
+To support user logout use the `oidc_logout` decorator:
+```python
+@app.route('/logout')
+@auth.oidc_logout
+def logout():
+    return 'You\'ve been successfully logged out!'
+```
+
+This extension also supports [RP-Initiated Logout](http://openid.net/specs/openid-connect-session-1_0.html#RPLogout),
+if the provider allows it.
+  
+### Specify the error view
+
+If an OAuth error response is received, either in the authentication or token response, it will be passed to the
+specified error view. An error view is specified by using the `error_view` decorator:
+
+```python
+from flask import jsonify
+
+@auth.error_view
+def error(error=None, error_description=None):
+ return jsonify({'error': error, 'message': error_description})
+```
+
+The function specified as the error view MUST accept two parameters, `error` and `error_description`, which corresponds
+to the [OIDC/OAuth error parameters](http://openid.net/specs/openid-connect-core-1_0.html#AuthError).
+
+If no error view is specified a generic error message will be displayed to the user.
+
 
 ## Configuration
 
@@ -38,22 +128,3 @@ See the [Flask documentation](http://flask.pocoo.org/docs/0.11/config/#builtin-c
 ## Example
 
 Have a look at the example Flask app in [app.py](example/app.py) for an idea of how to use it.
-
-### Specify the error view
-If an OAuth error response is received, either in the authentication or token response, it will be passed along to the
-specified error view. An error view is specified by using the `error_view` decorator:
-
-```python
-from flask import jsonify
-
-@auth.error_view
-def error(error=None, error_description=None):
-    return jsonify({'error': error, 'message': error_description})
-```
-
-The function specified as the error view MUST accept two parameters, `error` and `error_description`, which corresponds
-to the [OIDC/OAuth error parameters](http://openid.net/specs/openid-connect-core-1_0.html#AuthError).
-
-If no error view is specified a generic error message will be displayed to the user.
-
-
