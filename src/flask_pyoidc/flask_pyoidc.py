@@ -41,6 +41,7 @@ class OIDCAuthentication(object):
             self.client.store_registration_info(RegistrationRequest(**client_registration_info))
 
         self.logout_view = None
+        self._error_view = None
 
     def _authenticate(self):
         if 'client_id' not in self.client_registration_info:
@@ -79,6 +80,9 @@ class OIDCAuthentication(object):
         if authn_resp['state'] != flask.session.pop('state'):
             raise ValueError('The \'state\' parameter does not match.')
 
+        if 'error' in authn_resp:
+            return self._handle_error_response(authn_resp)
+
         # do token request
         args = {
             'code': authn_resp['code'],
@@ -88,20 +92,25 @@ class OIDCAuthentication(object):
                                                          request_args=args,
                                                          authn_method=self.client.registration_response.get(
                                                              'token_endpoint_auth_method', 'client_secret_basic'))
-        id_token = token_resp['id_token']
-        if id_token['nonce'] != flask.session.pop('nonce'):
-            raise ValueError('The \'nonce\' parameter does not match.')
-        access_token = token_resp['access_token']
+        if 'error' in token_resp:
+            return self._handle_error_response(token_resp)
+
+        flask.session['access_token'] = token_resp['access_token']
+
+        id_token = None
+        if 'id_token' in token_resp:
+            id_token = token_resp['id_token']
+            if id_token['nonce'] != flask.session.pop('nonce'):
+                raise ValueError('The \'nonce\' parameter does not match.')
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.jwt
 
         # do userinfo request
         userinfo = self._do_userinfo_request(authn_resp['state'], self.userinfo_endpoint_method)
-        if userinfo['sub'] != id_token['sub']:
+        if id_token and userinfo and userinfo['sub'] != id_token['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
         # store the current user session
-        flask.session['id_token'] = id_token.to_dict()
-        flask.session['id_token_jwt'] = id_token.jwt
-        flask.session['access_token'] = access_token
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
 
@@ -114,13 +123,20 @@ class OIDCAuthentication(object):
 
         return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
 
-    def _reauthentication_necessary(self, id_token):
-        return not id_token
+    def _handle_error_response(self, error_response):
+        if self._error_view:
+            error = {k: error_response[k] for k in ['error', 'error_description'] if k in error_response}
+            return self._error_view(**error)
+
+        return 'Something went wrong with the authentication, please try to login again.'
+
+    def _reauthentication_necessary(self, access_token):
+        return not access_token
 
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
-            if not self._reauthentication_necessary(flask.session.get('id_token')):
+            if not self._reauthentication_necessary(flask.session.get('access_token')):
                 # make the session permanent if the user has chosen to configure a custom lifetime
                 if self.app.config.get('PERMANENT_SESSION', False):
                     flask.session.permanent = True
@@ -162,3 +178,7 @@ class OIDCAuthentication(object):
             return view_func(*args, **kwargs)
 
         return wrapper
+
+    def error_view(self, view_func):
+        self._error_view = view_func
+        return view_func

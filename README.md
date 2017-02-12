@@ -38,3 +38,22 @@ See the [Flask documentation](http://flask.pocoo.org/docs/0.11/config/#builtin-c
 ## Example
 
 Have a look at the example Flask app in [app.py](example/app.py) for an idea of how to use it.
+
+### Specify the error view
+If an OAuth error response is received, either in the authentication or token response, it will be passed along to the
+specified error view. An error view is specified by using the `error_view` decorator:
+
+```python
+from flask import jsonify
+
+@auth.error_view
+def error(error=None, error_description=None):
+    return jsonify({'error': error, 'message': error_description})
+```
+
+The function specified as the error view MUST accept two parameters, `error` and `error_description`, which corresponds
+to the [OIDC/OAuth error parameters](http://openid.net/specs/openid-connect-core-1_0.html#AuthError).
+
+If no error view is specified a generic error message will be displayed to the user.
+
+
