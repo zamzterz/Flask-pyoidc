@@ -18,6 +18,7 @@ script:
   - tox
 
 before_install:
+  - pip install -e .
   - pip install pytest-cov codecov -r tests/requirements.txt
 
 after_success:
