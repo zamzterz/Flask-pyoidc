@@ -5,7 +5,7 @@ import pytest
 import responses
 from flask import Flask
 from mock import MagicMock
-from oic.oic.message import IdToken, OpenIDSchema
+from oic.oic.message import IdToken, OpenIDSchema, AccessTokenResponse
 from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
@@ -46,8 +46,8 @@ class TestOIDCAuthentication(object):
                                    client_registration_info={'client_id': 'foo'},
                                    userinfo_endpoint_method=method)
         authn.client.do_access_token_request = MagicMock(
-            return_value={'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
-                          'access_token': 'access_token'})
+            return_value=AccessTokenResponse(**{'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
+                          'access_token': 'access_token'}))
         userinfo_request_mock = MagicMock(return_value=OpenIDSchema(**{'sub': sub}))
         authn.client.do_user_info_request = userinfo_request_mock
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):

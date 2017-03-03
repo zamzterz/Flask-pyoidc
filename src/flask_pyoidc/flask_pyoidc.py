@@ -1,5 +1,7 @@
 import functools
 
+import logging
+
 import flask
 from flask.helpers import url_for
 from oic import rndstr
@@ -7,6 +9,8 @@ from oic.oic import Client
 from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, AuthorizationResponse, EndSessionRequest
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
+
+logger = logging.getLogger(__name__)
 
 
 class OIDCAuthentication(object):
@@ -45,14 +49,18 @@ class OIDCAuthentication(object):
 
     def _authenticate(self):
         if 'client_id' not in self.client_registration_info:
+            logger.debug('performing dynamic client registration')
             # do dynamic registration
             if self.logout_view:
                 # handle support for logout
                 with self.app.app_context():
-                    self.client_registration_info['post_logout_redirect_uris'] = [url_for(self.logout_view.__name__,
-                                                                                          _external=True)]
-            self.client.register(self.client.provider_info['registration_endpoint'],
-                                 **self.client_registration_info)
+                    post_logout_redirect_uri = url_for(self.logout_view.__name__, _external=True)
+                    logger.debug('built post_logout_redirect_uri=%s', post_logout_redirect_uri)
+                    self.client_registration_info['post_logout_redirect_uris'] = [post_logout_redirect_uri]
+
+            registration_response = self.client.register(self.client.provider_info['registration_endpoint'],
+                                                         **self.client_registration_info)
+            logger.debug('client registration response: %s', registration_response.to_json())
 
         flask.session['destination'] = flask.request.url
         flask.session['state'] = rndstr()
@@ -68,6 +76,8 @@ class OIDCAuthentication(object):
 
         args.update(self.extra_request_args)
         auth_req = self.client.construct_AuthorizationRequest(request_args=args)
+        logger.debug('sending authentication request: %s', auth_req.to_json())
+
         login_url = auth_req.request(self.client.authorization_endpoint)
         return redirect(login_url)
 
@@ -76,6 +86,7 @@ class OIDCAuthentication(object):
         query_string = flask.request.query_string.decode('utf-8')
         authn_resp = self.client.parse_response(AuthorizationResponse, info=query_string,
                                                 sformat='urlencoded')
+        logger.debug('received authentication response: %s', authn_resp.to_json())
 
         if authn_resp['state'] != flask.session.pop('state'):
             raise ValueError('The \'state\' parameter does not match.')
@@ -88,10 +99,14 @@ class OIDCAuthentication(object):
             'code': authn_resp['code'],
             'redirect_uri': self.client.registration_response['redirect_uris'][0],
         }
+
+        logger.debug('making token request')
         token_resp = self.client.do_access_token_request(state=authn_resp['state'],
                                                          request_args=args,
                                                          authn_method=self.client.registration_response.get(
                                                              'token_endpoint_auth_method', 'client_secret_basic'))
+        logger.debug('received token response: %s', token_resp.to_json())
+
         if 'error' in token_resp:
             return self._handle_error_response(token_resp)
 
@@ -100,6 +115,7 @@ class OIDCAuthentication(object):
         id_token = None
         if 'id_token' in token_resp:
             id_token = token_resp['id_token']
+            logger.debug('received id token: %s', id_token.to_json())
             if id_token['nonce'] != flask.session.pop('nonce'):
                 raise ValueError('The \'nonce\' parameter does not match.')
             flask.session['id_token'] = id_token.to_dict()
@@ -121,7 +137,10 @@ class OIDCAuthentication(object):
         if userinfo_endpoint_method is None:
             return None
 
-        return self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
+        logger.debug('making userinfo request')
+        userinfo_response = self.client.do_user_info_request(method=userinfo_endpoint_method, state=state)
+        logger.debug('received userinfo response: %s', userinfo_response.to_json())
+        return userinfo_response
 
     def _handle_error_response(self, error_response):
         if self._error_view:
@@ -141,13 +160,16 @@ class OIDCAuthentication(object):
                 if self.app.config.get('PERMANENT_SESSION', False):
                     flask.session.permanent = True
 
+                logger.debug('user already authenticated, redirecting directly to view')
                 return view_func(*args, **kwargs)
 
+            logger.debug('user not authenticated, start flow')
             return self._authenticate()
 
         return wrapper
 
     def _logout(self):
+        logger.debug('user logout')
         id_token_jwt = flask.session['id_token_jwt']
         flask.session.clear()
 
@@ -157,6 +179,7 @@ class OIDCAuthentication(object):
                 id_token_hint=id_token_jwt,
                 post_logout_redirect_uri=self.client_registration_info['post_logout_redirect_uris'][0],
                 state=flask.session['end_session_state'])
+            logger.debug('send endsession request: %s', end_session_request.to_json())
             return redirect(end_session_request.request(self.client.provider_info['end_session_endpoint']), 303)
 
         return None
