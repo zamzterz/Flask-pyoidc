@@ -124,6 +124,9 @@ class OIDCAuthentication(object):
                 raise ValueError('The \'nonce\' parameter does not match.')
             flask.session['id_token'] = id_token.to_dict()
             flask.session['id_token_jwt'] = id_token.jwt
+            # set the session as requested by the OP if we have no default
+            flask.session.permanent = True
+            flask.session.permanent_session_lifetime = id_token.get('exp')-time.time()
 
         # do userinfo request
         userinfo = self._do_userinfo_request(authn_resp['state'], self.userinfo_endpoint_method)
