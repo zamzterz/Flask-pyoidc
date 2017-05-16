@@ -9,6 +9,7 @@ from oic.oic import Client
 from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest, AuthorizationResponse, EndSessionRequest
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from werkzeug.utils import redirect
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class OIDCAuthentication(object):
         self.logout_view = None
         self._error_view = None
 
-    def _authenticate(self):
+    def _authenticate(self, interactive=True):
         if 'client_id' not in self.client_registration_info:
             logger.debug('performing dynamic client registration')
             # do dynamic registration
@@ -73,6 +74,9 @@ class OIDCAuthentication(object):
             'state': flask.session['state'],
             'nonce': flask.session['nonce'],
         }
+        # Use silent authentication for session refresh (will not show login prompt to the user)
+        if not interactive:
+            args['prompt'] = 'none'
 
         args.update(self.extra_request_args)
         auth_req = self.client.construct_AuthorizationRequest(request_args=args)
@@ -130,6 +134,7 @@ class OIDCAuthentication(object):
         if userinfo:
             flask.session['userinfo'] = userinfo.to_dict()
 
+        flask.session['last_authenticated'] = time.time()
         destination = flask.session.pop('destination')
         return redirect(destination)
 
@@ -149,22 +154,19 @@ class OIDCAuthentication(object):
 
         return 'Something went wrong with the authentication, please try to login again.'
 
-    def _reauthentication_necessary(self, access_token):
-        return not access_token
-
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
-            if not self._reauthentication_necessary(flask.session.get('access_token')):
-                # make the session permanent if the user has chosen to configure a custom lifetime
-                if self.app.config.get('PERMANENT_SESSION', False):
-                    flask.session.permanent = True
-
-                logger.debug('user already authenticated, redirecting directly to view')
+            if flask.session.get('id_token_jwt'):
+                if ('session_refresh_interval' in self.client_registration_info) and flask.session.get('last_authenticated'):
+		    if flask.session.get('last_authenticated') + self.client_registration_info['session_refresh_interval'] < time.time():
+                        logger.debug('user session needs refresh')
+                        return self._authenticate(interactive=False)
+                logger.debug('user is already authenticated')
                 return view_func(*args, **kwargs)
-
-            logger.debug('user not authenticated, start flow')
-            return self._authenticate()
+            else:
+                logger.debug('user not authenticated, start flow')
+                return self._authenticate()
 
         return wrapper
 
