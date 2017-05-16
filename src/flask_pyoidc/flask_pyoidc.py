@@ -162,7 +162,7 @@ class OIDCAuthentication(object):
         def wrapper(*args, **kwargs):
             if flask.session.get('id_token_jwt'):
                 if ('session_refresh_interval' in self.client_registration_info) and flask.session.get('last_authenticated'):
-		    if flask.session.get('last_authenticated') + self.client_registration_info['session_refresh_interval'] < time.time():
+                    if flask.session.get('last_authenticated') + self.client_registration_info['session_refresh_interval'] < time.time():
                         logger.debug('user session needs refresh')
                         return self._authenticate(interactive=False)
                 logger.debug('user is already authenticated')
