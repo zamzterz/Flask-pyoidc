@@ -54,6 +54,23 @@ auth = OIDCAuthentication(client_registration_info=client_info)
 **Note: The redirect URIs registered with the provider MUST include `<application_url>/redirect_uri`,
 where `<application_url>` is the URL for the Flask application.**
 
+#### Session refresh
+
+If your OpenID Connect provider supports the `prompt=none` parameter, the library can automatically support session refresh on your behalf.
+This ensures that the user session attributes (OIDC claims, user being active, etc.) are valid and up-to-date without having to log the user out and back in.
+To use the feature simply pass the parameter requesting the session refresh internval as such:
+```python
+client_info = {
+    'client_id': 'cl41ekfb9j',
+    'client_secret': 'm1C659wLipXfUUR50jlZ',
+    'session_refresh_interval': 900
+
+}
+auth = OIDCAuthentication(client_registration_info=client_info)
+```
+
+**Note: The client will still be logged out at whichever expiration time you set for the flask session.
+
 #### Dynamic client registration
 
 If no `client_id` is specified in the `client_registration_info` constructor parameter, the library will try to
