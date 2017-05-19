@@ -55,6 +55,15 @@ class Session(object):
         return last + refresh
 
     def authenticated(self):
+        """Flask session object's dictionary is set to empty dict when the
+        session expires or is invalid. Thus checking for any item in the dict
+        is a valid way to check if we're authenticated.
+        The oic library already verified the id_token signature and expiration
+        time at this point.
+        Finally, unless the caller of the library overrides this, the session
+        expiration itself is set to the id_token expiration so this check is
+        also already taken care of.
+        """
         if self.flask_session.get('id_token_jwt'):
             return True
         else:
