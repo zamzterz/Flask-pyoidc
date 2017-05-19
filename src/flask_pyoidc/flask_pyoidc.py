@@ -1,3 +1,19 @@
+"""
+   Copyright 2017 Samuel Gulliksson
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+"""
+
 import functools
 
 import logging
@@ -5,27 +21,71 @@ import logging
 import flask
 from flask import current_app
 from flask.helpers import url_for
-from oic import rndstr
 from oic.oic import Client
-from oic.oic.message import ProviderConfigurationResponse, RegistrationRequest
-from oic.oic.messsage import AuthorizationResponse, EndSessionRequest
+from oic.oic.message import AuthorizationResponse
+from oic.oic.message import EndSessionRequest
+from oic.oic.message import ProviderConfigurationResponse
+from oic.oic.message import RegistrationRequest
+from oic import rndstr
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
-from werkzeug.utils import redirect
+
 import time
+from werkzeug.utils import redirect
+
 
 logger = logging.getLogger(__name__)
 
-class OIDCAuthentication(object):
+
+class Session(object):
+
+    """Session object for refresh tokens.
+
+    First class object for comparison of date times during session handling.
+    Collapses logic in decorator function to simple elif from multi-level
+    nesting of logic.
     """
-        OIDCAuthentication object for flask extension.  Takes a flask app
-        object, client, registration info, provider configuration, and
-        supports optional extra request args to the OIDC identity provider.
+
+    def __init__(self, flask_session, client_registration_info):
+        self.flask_session = flask_session
+        self.client_registration_info = client_registration_info
+
+    def __refresh_time(self):
+        last = self.flask_session.get('last_authenticated')
+        refresh = self.client_registration_info['session_refresh_interval']
+        return last + refresh
+
+    def authenticated(self):
+        if self.flask_session.get('id_token_jwt'):
+            return True
+        else:
+            return False
+
+    def supports_refresh(self):
+        if ('session_refresh_interval' in self.client_registration_info):
+            return True
+        else:
+            return False
+
+    def needs_refresh(self):
+        now = time.time()
+        if self.__refresh_time() < now:
+            return True
+        else:
+            return False
+
+
+class OIDCAuthentication(object):
+    """OIDCAuthentication object for flask extension.
+
+    Takes a flask app object, client, registration info,
+    provider configuration, and supports optional extra request args to the
+    OIDC identity provider.
     """
     def __init__(
-                 self, flask_app, client_registration_info=None,
-                 issuer=None, provider_configuration_info=None,
-                 userinfo_endpoint_method='POST',
-                 extra_request_args=None
+        self, flask_app, client_registration_info=None,
+        issuer=None, provider_configuration_info=None,
+        userinfo_endpoint_method='POST',
+        extra_request_args=None
     ):
         self.app = flask_app
         self.userinfo_endpoint_method = userinfo_endpoint_method
@@ -36,10 +96,10 @@ class OIDCAuthentication(object):
         # Raise exception if oic auth will fail based on lack of data.
         if not issuer and not provider_configuration_info:
             raise ValueError(
-                    'Either \'issuer\' (for dynamic discovery) or \
-                    \'provider_configuration_info\' \
-                    (for static configuration must be specified.'
-                )
+                'Either \'issuer\' (for dynamic discovery) or \
+                \'provider_configuration_info\' \
+                for static configuration must be specified.'
+            )
         # If only issuer provided assume discovery and initalize anyway.
         if issuer and not provider_configuration_info:
             self.client.provider_config(issuer)
@@ -53,17 +113,19 @@ class OIDCAuthentication(object):
         self.client_registration_info = client_registration_info or {}
 
         # setup redirect_uri as a flask route
-        self.app.add_url_rule('/redirect_uri', 'redirect_uri',
-                              self._handle_authentication_response
+        self.app.add_url_rule(
+            '/redirect_uri', 'redirect_uri',
+            self._handle_authentication_response
         )
 
         # dynamically add the flask redirect uri to the client info
         with self.app.app_context():
             self.client_registration_info['redirect_uris']\
-            = url_for('redirect_uri')
+                = url_for('redirect_uri')
 
         # if non-discovery client add the provided info from the constructor
-        if client_registration_info and 'client_id' in client_registration_info:
+        if client_registration_info and 'client_id'\
+        in client_registration_info:
             # static client info provided
             self.client.store_registration_info(
                 RegistrationRequest(**client_registration_info)
@@ -88,8 +150,9 @@ class OIDCAuthentication(object):
                         post_logout_redirect_uri
                     )
 
-                    self.client_registration_info['post_logout_redirect_uris']\
-                    = [post_logout_redirect_uri]
+                    self.client_registration_info[
+                        'post_logout_redirect_uris'
+                    ] = [post_logout_redirect_uri]
 
             registration_response = self.client.register(
                 self.client.provider_info['registration_endpoint'],
@@ -109,7 +172,9 @@ class OIDCAuthentication(object):
             'client_id': self.client.client_id,
             'response_type': 'code',
             'scope': ['openid'],
-            'redirect_uri': self.client.registration_response['redirect_uris'][0],
+            'redirect_uri': self.client.registration_response[
+                'redirect_uris'
+            ][0],
             'state': flask.session['state'],
             'nonce': flask.session['nonce'],
         }
@@ -120,7 +185,10 @@ class OIDCAuthentication(object):
             args['prompt'] = 'none'
 
         args.update(self.extra_request_args)
-        auth_req = self.client.construct_AuthorizationRequest(request_args=args)
+        auth_req = self.client.construct_AuthorizationRequest(
+            request_args=args
+        )
+
         logger.debug('sending authentication request: %s', auth_req.to_json())
 
         login_url = auth_req.request(self.client.authorization_endpoint)
@@ -131,10 +199,10 @@ class OIDCAuthentication(object):
         query_string = flask.request.query_string.decode('utf-8')
 
         authn_resp = self.client.parse_response(
-                        AuthorizationResponse,
-                        info=query_string,
-                        sformat='urlencoded'
-                    )
+            AuthorizationResponse,
+            info=query_string,
+            sformat='urlencoded'
+        )
 
         logger.debug(
             'received authentication response: %s', authn_resp.to_json()
@@ -149,7 +217,7 @@ class OIDCAuthentication(object):
         # do token request
         args = {
             'code': authn_resp['code'],
-            'redirect_uri': \
+            'redirect_uri':
                 self.client.registration_response['redirect_uris'][0]
         }
 
@@ -180,11 +248,12 @@ class OIDCAuthentication(object):
                 raise ValueError('The \'nonce\' parameter does not match.')
 
             flask.session['id_token'] = id_token.to_dict()
-            flask.session['id_token_jwt'] = id_token.jwt
+            flask.session['id_token_jwt'] = id_token.to_jwt()
             # set the session as requested by the OP if we have no default
             if current_app.config.get('SESSION_PERMANENT'):
                 flask.session.permanent = True
-                flask.session.permanent_session_lifetime = id_token.get('exp')-time.time()
+                flask.session.permanent_session_lifetime\
+                = id_token.get('exp')-time.time()
 
         # do userinfo request
         userinfo = self._do_userinfo_request(
@@ -202,6 +271,7 @@ class OIDCAuthentication(object):
 
         flask.session['last_authenticated'] = time.time()
         destination = flask.session.pop('destination')
+
         return redirect(destination)
 
     def _do_userinfo_request(self, state, userinfo_endpoint_method):
@@ -222,20 +292,37 @@ class OIDCAuthentication(object):
     def _handle_error_response(self, error_response):
         if self._error_view:
             error = {
-                k: error_response[k] for k in ['error', 'error_description'] if k in error_response
+                k:
+                    error_response[k] for k in ['error', 'error_description']
+                    if k in error_response
             }
             return self._error_view(**error)
 
-        return 'Something went wrong with the authentication, please try to login again.'
+        message = "Something went wrong with the authentication, \
+        please try to login again."
+
+        return message
 
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
-            if flask.session.get('id_token_jwt'):
-                if ('session_refresh_interval' in self.client_registration_info) and flask.session.get('last_authenticated'):
-                    if flask.session.get('last_authenticated') + self.client_registration_info['session_refresh_interval'] < time.time():
-                        logger.debug('user session needs refresh')
-                        return self._authenticate(interactive=False)
+            # Initialize first class session object.
+            session = Session(
+                flask_session=flask.session,
+                client_registration_info=self.client_registration_info
+            )
+            # First check to see if refresh_token is enabled.
+            # Check to see if the session needs to be refreshed.
+            # If so call non-interactive refresh.
+            if session.supports_refresh() and session.authenticated():
+                if session.needs_refresh() is True:
+                    logger.debug('user session needs refresh')
+                    return self._authenticate(interactive=False)
+                else:
+                    logger.debug('user is already authenticated')
+                    return view_func(*args, **kwargs)
+            # Otherwise do regular session handling.
+            elif not session.supports_refresh() and session.authenticated():
                 logger.debug('user is already authenticated')
                 return view_func(*args, **kwargs)
             else:
@@ -254,7 +341,9 @@ class OIDCAuthentication(object):
 
             end_session_request = EndSessionRequest(
                 id_token_hint=id_token_jwt,
-                post_logout_redirect_uri=self.client_registration_info['post_logout_redirect_uris'][0],
+                post_logout_redirect_uri=self.client_registration_info[
+                    'post_logout_redirect_uris'
+                ][0],
                 state=flask.session['end_session_state']
             )
 
@@ -279,7 +368,7 @@ class OIDCAuthentication(object):
             if 'state' in flask.request.args:
                 # returning redirect from provider
                 assert flask.request.args['state']\
-                == flask.session.pop('end_session_state')
+                    == flask.session.pop('end_session_state')
                 return view_func(*args, **kwargs)
 
             redirect_to_provider = self._logout()
