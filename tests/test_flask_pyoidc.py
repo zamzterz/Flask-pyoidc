@@ -19,8 +19,8 @@ ISSUER = 'https://op.example.com'
 class TestOIDCAuthentication(object):
     mock_time = Mock()
     mock_time_int = Mock()
-    mock_time.return_value = time.mktime(datetime(1970, 1, 1).timetuple())
-    mock_time_int.return_value = int(time.mktime(datetime(1970, 1, 1).timetuple()))
+    mock_time.return_value = time.mktime(datetime(2017, 1, 1).timetuple())
+    mock_time_int.return_value = int(time.mktime(datetime(2017, 1, 1).timetuple()))
 
     @pytest.fixture(autouse=True)
     def create_flask_app(self):
@@ -134,7 +134,7 @@ class TestOIDCAuthentication(object):
             flask.session['access_token'] = 'test token'
             flask.session['id_token'] = id_token.to_dict()
             flask.session['id_token_jwt'] = id_token.to_jwt()
-            flask.session['last_authenticated'] = time.mktime(datetime(1970,1,1).timetuple())
+            flask.session['last_authenticated'] = time.mktime(datetime(2017,1,1).timetuple())
             authn.oidc_auth(callback_mock)()
         assert client_mock.construct_AuthorizationRequest.called is False
         assert callback_mock.called is True
@@ -146,7 +146,7 @@ class TestOIDCAuthentication(object):
         token_endpoint = ISSUER + '/token'
         userinfo_endpoint = ISSUER + '/userinfo'
         exp_time=10
-        epoch_int = int(time.mktime(datetime(1970,1,1).timetuple()))
+        epoch_int = int(time.mktime(datetime(2017,1,1).timetuple()))
         id_token = IdToken(**{'sub': 'sub1', 'iat': epoch_int, 'iss': ISSUER, 'aud': 'foo', 'nonce': 'test',
                               'exp': epoch_int+exp_time})
         token_response = {'access_token': 'test', 'token_type': 'Bearer', 'id_token': id_token.to_jwt()}
@@ -171,7 +171,7 @@ class TestOIDCAuthentication(object):
             flask.session['id_token_jwt'] = id_token.to_jwt()
             authn._handle_authentication_response()
             assert flask.session.permanent is True
-            assert flask.session.permanent_session_lifetime == exp_time
+            assert int(flask.session.permanent_session_lifetime) == exp_time
 
     def test_logout(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
