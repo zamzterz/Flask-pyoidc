@@ -120,11 +120,11 @@ class OIDCAuthentication(object):
 
         # dynamically add the flask redirect uri to the client info
         with self.app.app_context():
-            self.client_registration_info['redirect_uris']\
+            self.client_registration_info['redirect_uris'] \
                 = url_for('redirect_uri')
 
         # if non-discovery client add the provided info from the constructor
-        if client_registration_info and 'client_id'\
+        if client_registration_info and 'client_id' \
         in client_registration_info:
             # static client info provided
             self.client.store_registration_info(
@@ -252,7 +252,7 @@ class OIDCAuthentication(object):
             # set the session as requested by the OP if we have no default
             if current_app.config.get('SESSION_PERMANENT'):
                 flask.session.permanent = True
-                flask.session.permanent_session_lifetime\
+                flask.session.permanent_session_lifetime \
                 = id_token.get('exp')-time.time()
 
         # do userinfo request
@@ -298,8 +298,8 @@ class OIDCAuthentication(object):
             }
             return self._error_view(**error)
 
-        message = "Something went wrong with the authentication, \
-        please try to login again."
+        message = ("Something went wrong with the authentication, " \
+        "please try to login again.")
 
         return message
 
@@ -367,7 +367,7 @@ class OIDCAuthentication(object):
         def wrapper(*args, **kwargs):
             if 'state' in flask.request.args:
                 # returning redirect from provider
-                assert flask.request.args['state']\
+                assert flask.request.args['state'] \
                     == flask.session.pop('end_session_state')
                 return view_func(*args, **kwargs)
 
