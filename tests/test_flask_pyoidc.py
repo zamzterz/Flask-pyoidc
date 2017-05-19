@@ -4,9 +4,12 @@ import flask
 import pytest
 import responses
 from flask import Flask
-from mock import MagicMock
+from mock import MagicMock, patch, Mock
 from oic.oic.message import IdToken, OpenIDSchema, AccessTokenResponse
 from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
+import time
+from oic.utils import time_util
+from datetime import datetime
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
@@ -14,6 +17,11 @@ ISSUER = 'https://op.example.com'
 
 
 class TestOIDCAuthentication(object):
+    mock_time = Mock()
+    mock_time_int = Mock()
+    mock_time.return_value = time.mktime(datetime(1970, 1, 1).timetuple())
+    mock_time_int.return_value = int(time.mktime(datetime(1970, 1, 1).timetuple()))
+
     @pytest.fixture(autouse=True)
     def create_flask_app(self):
         self.app = Flask(__name__)
@@ -78,30 +86,92 @@ class TestOIDCAuthentication(object):
         request_params = dict(parse_qsl(urlparse(a.location).query))
         assert set(extra_params.items()).issubset(set(request_params.items()))
 
-    def test_reauthentication_necessary_with_None(self):
+    def test_reauthenticate_if_no_session(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'})
-        assert authn._reauthentication_necessary(None) is True
-
-    def test_reauthentication_necessary_with_valid_access_token(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'})
-        access_token = 'test token'
-        assert authn._reauthentication_necessary(access_token) is False
-
-    def test_dont_reauthenticate_with_valid_id_token(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'})
+                client_registration_info={'client_id': 'foo'}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
         authn.client = client_mock
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        with self.app.test_request_context('/'):
+            flask.session['destination'] = '/'
+            flask.session['access_token'] = None
+            flask.session['id_token_jwt'] = None
+            authn.oidc_auth(callback_mock)()
+        assert client_mock.construct_AuthorizationRequest.called is True
+        assert callback_mock.called is False
+
+    def test_reauthenticate_silent_if_refresh_expired(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 1}, )
+        client_mock = MagicMock()
+        callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
+        authn.client = client_mock
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce', 'exp': 0})
         with self.app.test_request_context('/'):
             flask.session['destination'] = '/'
             flask.session['access_token'] = 'test token'
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            flask.session['last_authenticated'] = 1
             authn.oidc_auth(callback_mock)()
-        assert not client_mock.construct_AuthorizationRequest.called
+        assert client_mock.construct_AuthorizationRequest.called is True
+        assert callback_mock.called is False
+
+    @patch('time.time', mock_time)
+    def test_dont_reauthenticate_silent_if_refresh_not_expired(self):
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 999}, )
+        client_mock = MagicMock()
+        callback_mock = MagicMock()
+        callback_mock.__name__ = 'test_callback'  # required for Python 2
+        authn.client = client_mock
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce', 'exp': 0})
+        with self.app.test_request_context('/'):
+            flask.session['destination'] = '/'
+            flask.session['access_token'] = 'test token'
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            flask.session['last_authenticated'] = time.mktime(datetime(1970,1,1).timetuple())
+            authn.oidc_auth(callback_mock)()
+        assert client_mock.construct_AuthorizationRequest.called is False
         assert callback_mock.called is True
+
+    @patch('time.time', mock_time)
+    @patch('oic.utils.time_util.utc_time_sans_frac', mock_time_int)
+    @responses.activate
+    def test_session_expiration_set_to_id_token_exp(self):
+        token_endpoint = ISSUER + '/token'
+        userinfo_endpoint = ISSUER + '/userinfo'
+        exp_time=10
+        epoch_int = int(time.mktime(datetime(1970,1,1).timetuple()))
+        id_token = IdToken(**{'sub': 'sub1', 'iat': epoch_int, 'iss': ISSUER, 'aud': 'foo', 'nonce': 'test',
+                              'exp': epoch_int+exp_time})
+        token_response = {'access_token': 'test', 'token_type': 'Bearer', 'id_token': id_token.to_jwt()}
+        userinfo_response = {'sub': 'sub1'}
+        responses.add(responses.POST, token_endpoint,
+                      body=json.dumps(token_response),
+                      content_type='application/json')
+        responses.add(responses.POST, userinfo_endpoint,
+                      body=json.dumps(userinfo_response),
+                      content_type='application/json')
+        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER,
+                                                                          'token_endpoint': token_endpoint,
+                                                                          'userinfo_endpoint': userinfo_endpoint},
+                client_registration_info={'client_id': 'foo', 'client_secret':'foo'}, )
+
+        self.app.config.update({'SESSION_PERMANENT': True})
+        with self.app.test_request_context('/redirect_uri?state=test&code=test'):
+            flask.session['destination'] = '/'
+            flask.session['state'] = 'test'
+            flask.session['nonce'] = 'test'
+            flask.session['id_token'] = id_token.to_dict()
+            flask.session['id_token_jwt'] = id_token.to_jwt()
+            authn._handle_authentication_response()
+            assert flask.session.permanent is True
+            assert flask.session.permanent_session_lifetime == exp_time
 
     def test_logout(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
