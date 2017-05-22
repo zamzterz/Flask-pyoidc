@@ -53,7 +53,7 @@ class TestSessionObject(object):
 
     def test_unauthenticated_session_with_refresh(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 300}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 300}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -94,7 +94,7 @@ class TestSessionObject(object):
 
     def test_supports_refresh(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 1}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 1}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -138,7 +138,7 @@ class TestSessionObject(object):
 
     def test_needs_refresh(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 1}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 1}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -160,7 +160,7 @@ class TestSessionObject(object):
 
     def test_does_not_need_refresh(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 1}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 1}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         now = time.time()
@@ -270,7 +270,7 @@ class TestOIDCAuthentication(object):
 
     def test_reauthenticate_silent_if_refresh_expired(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 1}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 1}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -289,7 +289,7 @@ class TestOIDCAuthentication(object):
     @patch('time.time', mock_time)
     def test_dont_reauthenticate_silent_if_refresh_not_expired(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                client_registration_info={'client_id': 'foo', 'session_refresh_interval': 999}, )
+                client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 999}, )
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
