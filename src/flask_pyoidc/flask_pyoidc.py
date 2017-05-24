@@ -51,7 +51,7 @@ class Session(object):
 
     def __refresh_time(self):
         last = self.flask_session.get('last_authenticated')
-        refresh = self.client_registration_info['session_refresh_interval']
+        refresh = self.client_registration_info['session_refresh_interval_seconds']
         return last + refresh
 
     def authenticated(self):
@@ -70,7 +70,7 @@ class Session(object):
             return False
 
     def supports_refresh(self):
-        if ('session_refresh_interval' in self.client_registration_info):
+        if ('session_refresh_interval_seconds' in self.client_registration_info):
             return True
         else:
             return False
