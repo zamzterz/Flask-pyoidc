@@ -41,17 +41,16 @@ class Session(object):
     """Session object for refresh tokens.
 
     First class object for comparison of date times during session handling.
-    Collapses logic in decorator function to simple elif from multi-level
-    nesting of logic.
+    Wraps comparison of date time necessary for proper session handling.
     """
 
     def __init__(self, flask_session, client_registration_info):
         self.flask_session = flask_session
         self.client_registration_info = client_registration_info
 
-    def __refresh_time(self):
+    def _refresh_time(self):
         last = self.flask_session.get('last_authenticated')
-        refresh = self.client_registration_info['session_refresh_interval']
+        refresh = self.client_registration_info['session_refresh_interval_seconds']
         return last + refresh
 
     def authenticated(self):
@@ -75,23 +74,19 @@ class Session(object):
             return False
 
     def supports_refresh(self):
-        if ('session_refresh_interval' in self.client_registration_info):
+        if ('session_refresh_interval_seconds' in self.client_registration_info):
             return True
         else:
             return False
 
     def needs_refresh(self):
-        now = time.time()
-        if self.__refresh_time() < now:
-            return True
-        else:
-            return False
+        return self._refresh_time() < time.time()
 
 
 class OIDCAuthentication(object):
-    """OIDCAuthentication object for flask extension.
+    """OIDCAuthentication object for Flask extension.
 
-    Takes a flask app object, client, registration info,
+    Takes a Flask app object, client, registration info,
     provider configuration, and supports optional extra request args to the
     OIDC identity provider.
     """
@@ -128,7 +123,8 @@ class OIDCAuthentication(object):
         # setup redirect_uri as a flask route
         self.app.add_url_rule('/redirect_uri', 'redirect_uri', self._handle_authentication_response)
 
-        # dynamically add the flask redirect uri to the client info
+
+        # dynamically add the Flask redirect uri to the client info
         with self.app.app_context():
             self.client_registration_info['redirect_uris'] \
                 = url_for('redirect_uri')
