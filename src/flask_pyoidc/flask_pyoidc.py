@@ -54,15 +54,20 @@ class Session(object):
         return last + refresh
 
     def authenticated(self):
-        """Flask session object's dictionary is set to empty dict when the
+        """Flask session object
+
+        Dictionary is set to empty dict when the
         session expires or is invalid. Thus checking for any item in the dict
         is a valid way to check if we're authenticated.
+
         The oic library already verified the id_token signature and expiration
         time at this point.
+
         Finally, unless the caller of the library overrides this, the session
         expiration itself is set to the id_token expiration so this check is
         also already taken care of.
         """
+
         if self.flask_session.get('id_token_jwt'):
             return True
         else:
@@ -100,9 +105,8 @@ class OIDCAuthentication(object):
         # Raise exception if oic auth will fail based on lack of data.
         if not issuer and not provider_configuration_info:
             raise ValueError(
-                'Either \'issuer\' (for dynamic discovery) or \
-                \'provider_configuration_info\' \
-                for static configuration must be specified.'
+                'Either \'issuer\' (for dynamic discovery) or provider_configuration_info'
+                ' for static configuration must be specified.'
             )
         # If only issuer provided assume discovery and initalize anyway.
         if issuer and not provider_configuration_info:
@@ -116,11 +120,9 @@ class OIDCAuthentication(object):
 
         self.client_registration_info = client_registration_info or {}
 
-        # setup redirect_uri as a Flask route
-        self.app.add_url_rule(
-            '/redirect_uri', 'redirect_uri',
-            self._handle_authentication_response
-        )
+        # setup redirect_uri as a flask route
+        self.app.add_url_rule('/redirect_uri', 'redirect_uri', self._handle_authentication_response)
+
 
         # dynamically add the Flask redirect uri to the client info
         with self.app.app_context():
@@ -128,8 +130,7 @@ class OIDCAuthentication(object):
                 = url_for('redirect_uri')
 
         # if non-discovery client add the provided info from the constructor
-        if client_registration_info and 'client_id' \
-        in client_registration_info:
+        if client_registration_info and 'client_id' in client_registration_info:
             # static client info provided
             self.client.store_registration_info(
                 RegistrationRequest(**client_registration_info)
@@ -228,13 +229,10 @@ class OIDCAuthentication(object):
         logger.debug('making token request')
 
         token_resp = self.client.do_access_token_request(
-                        state=authn_resp['state'],
-                        request_args=args,
-                        authn_method=self.client.registration_response.get(
-                            'token_endpoint_auth_method',
-                            'client_secret_basic'
-                        )
-                    )
+            state=authn_resp['state'],
+            request_args=args,
+            authn_method=self.client.registration_response.get('token_endpoint_auth_method', 'client_secret_basic')
+        )
 
         logger.debug('received token response: %s', token_resp.to_json())
 
@@ -256,8 +254,7 @@ class OIDCAuthentication(object):
             # set the session as requested by the OP if we have no default
             if current_app.config.get('SESSION_PERMANENT'):
                 flask.session.permanent = True
-                flask.session.permanent_session_lifetime \
-                = id_token.get('exp') - time.time()
+                flask.session.permanent_session_lifetime = id_token.get('exp')-time.time()
 
         # do userinfo request
         userinfo = self._do_userinfo_request(
@@ -265,9 +262,7 @@ class OIDCAuthentication(object):
         )
 
         if id_token and userinfo and userinfo['sub'] != id_token['sub']:
-            raise ValueError(
-                'The \'sub\' of userinfo does not match \'sub\' of ID Token.'
-            )
+            raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
         # store the current user session
         if userinfo:
@@ -287,9 +282,7 @@ class OIDCAuthentication(object):
             method=userinfo_endpoint_method, state=state
         )
 
-        logger.debug(
-            'received userinfo response: %s', userinfo_response.to_json()
-        )
+        logger.debug('received userinfo response: %s', userinfo_response.to_json())
 
         return userinfo_response
 
@@ -302,8 +295,7 @@ class OIDCAuthentication(object):
             }
             return self._error_view(**error)
 
-        message = ("Something went wrong with the authentication, " \
-        "please try to login again.")
+        message = ("Something went wrong with the authentication, please try to login again.")
 
         return message
 
@@ -351,17 +343,9 @@ class OIDCAuthentication(object):
                 state=flask.session['end_session_state']
             )
 
-            logger.debug(
-                'send endsession request: %s',
-                end_session_request.to_json()
-            )
+            logger.debug('send endsession request: %s', end_session_request.to_json())
 
-            return redirect(
-                end_session_request.request(
-                    self.client.provider_info['end_session_endpoint']
-                ), 303
-            )
-
+            return redirect(end_session_request.request(self.client.provider_info['end_session_endpoint']), 303)
         return None
 
     def oidc_logout(self, view_func):
@@ -371,8 +355,7 @@ class OIDCAuthentication(object):
         def wrapper(*args, **kwargs):
             if 'state' in flask.request.args:
                 # returning redirect from provider
-                assert flask.request.args['state'] \
-                    == flask.session.pop('end_session_state')
+                assert flask.request.args['state'] == flask.session.pop('end_session_state')
                 return view_func(*args, **kwargs)
 
             redirect_to_provider = self._logout()
