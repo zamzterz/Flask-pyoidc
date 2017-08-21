@@ -6,6 +6,7 @@ from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 PORT = 5000
 app = Flask(__name__)
 
+
 # See http://flask.pocoo.org/docs/0.12/config/
 app.config.update({'SERVER_NAME': 'example.com',
                    'SECRET_KEY': 'dev_key',
