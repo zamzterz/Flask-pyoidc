@@ -6,18 +6,18 @@ from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 PORT = 5000
 app = Flask(__name__)
 
+
 # See http://flask.pocoo.org/docs/0.12/config/
 app.config.update({'SERVER_NAME': 'example.com',
                    'SECRET_KEY': 'dev_key',
                    'PREFERRED_URL_SCHEME': 'https',
-                   'SESSION_PERMANENT': True, #turn on flask session support
-                   'PERMANENT_SESSION_LIFETIME': 2592000, #session time in seconds (30 days)
+                   'SESSION_PERMANENT': True, # turn on flask session support
+                   'PERMANENT_SESSION_LIFETIME': 2592000, # session time in seconds (30 days)
                    'DEBUG': True})
 
 client_info = {
 	'client_id': '',
-	'client_secret': '',
-        'session_refresh_interval_seconds': 900 #interval at which to check the user attributes are valid, in seconds (15 min)
+	'client_secret': ''
 }
 
 auth = OIDCAuthentication(app, client_registration_info=client_info, issuer="auth.example.net")
