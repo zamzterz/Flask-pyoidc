@@ -68,16 +68,10 @@ class Session(object):
         also already taken care of.
         """
 
-        if self.flask_session.get('id_token_jwt'):
-            return True
-        else:
-            return False
+        return self.flask_session.get('id_token_jwt') != None
 
     def supports_refresh(self):
-        if ('session_refresh_interval_seconds' in self.client_registration_info):
-            return True
-        else:
-            return False
+        return 'session_refresh_interval_seconds' in self.client_registration_info
 
     def needs_refresh(self):
         return self._refresh_time() < time.time()
@@ -254,7 +248,7 @@ class OIDCAuthentication(object):
             # set the session as requested by the OP if we have no default
             if current_app.config.get('SESSION_PERMANENT'):
                 flask.session.permanent = True
-                flask.session.permanent_session_lifetime = id_token.get('exp')-time.time()
+                flask.session.permanent_session_lifetime = id_token.get('exp') - time.time()
 
         # do userinfo request
         userinfo = self._do_userinfo_request(

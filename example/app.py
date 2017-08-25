@@ -15,12 +15,7 @@ app.config.update({'SERVER_NAME': 'example.com',
                    'PERMANENT_SESSION_LIFETIME': 2592000, # session time in seconds (30 days)
                    'DEBUG': True})
 
-client_info = {
-	'client_id': '',
-	'client_secret': ''
-}
-
-auth = OIDCAuthentication(app, client_registration_info=client_info, issuer="auth.example.net")
+auth = OIDCAuthentication(app, issuer="auth.example.net")
 
 @app.route('/')
 @auth.oidc_auth
