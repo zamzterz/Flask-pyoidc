@@ -11,7 +11,7 @@ setup(
         author_email='samuel.gulliksson@gmail.com',
         description='Flask extension for OpenID Connect authentication.',
         install_requires=[
-            'oic==0.9.1.0',
+            'oic==0.11.0.1',
             'Flask'
         ]
 )
