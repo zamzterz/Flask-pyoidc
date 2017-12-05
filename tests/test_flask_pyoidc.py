@@ -244,24 +244,6 @@ class TestOIDCAuthentication(object):
         assert resp.status_code == 303
         assert not callback_mock.called
 
-    def test_oidc_logout_redirects_to_provider(self):
-        end_session_endpoint = 'https://provider.example.com/end_session'
-        post_logout_uri = 'https://client.example.com/post_logout'
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER,
-                                                                'end_session_endpoint': end_session_endpoint},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'post_logout_redirect_uris': [post_logout_uri]})
-        callback_mock = MagicMock()
-        callback_mock.__name__ = 'test_callback'  # required for Python 2
-        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
-        with self.app.test_request_context('/logout'):
-            flask.session['id_token_jwt'] = id_token.to_jwt()
-            resp = authn.oidc_logout(callback_mock)()
-            assert authn.logout_view == callback_mock
-        assert resp.status_code == 303
-        assert not callback_mock.called
-
     def test_oidc_logout_handles_redirects_from_provider(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         post_logout_uri = 'https://client.example.com/post_logout'
