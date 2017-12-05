@@ -113,14 +113,10 @@ class TestOIDCAuthentication(object):
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
         authn.client = client_mock
-        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
         with self.app.test_request_context('/'):
-            flask.session['destination'] = '/'
-            flask.session['access_token'] = None
-            flask.session['id_token_jwt'] = None
             authn.oidc_auth(callback_mock)()
-        assert client_mock.construct_AuthorizationRequest.called is True
-        assert callback_mock.called is False
+        assert client_mock.construct_AuthorizationRequest.called
+        assert not callback_mock.called
 
     def test_reauthenticate_silent_if_refresh_expired(self):
         authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
@@ -179,10 +175,8 @@ class TestOIDCAuthentication(object):
             flask.session['destination'] = '/'
             flask.session['state'] = 'test'
             flask.session['nonce'] = 'test'
-            flask.session['id_token'] = id_token.to_dict()
-            flask.session['id_token_jwt'] = id_token.to_jwt()
             authn._handle_authentication_response()
-            assert flask.session.permanent is True
+            assert flask.session.permanent
             assert int(flask.session.permanent_session_lifetime) == exp_time
 
     def test_logout(self):
@@ -199,8 +193,8 @@ class TestOIDCAuthentication(object):
             flask.session['userinfo'] = {'foo': 'bar', 'abc': 'xyz'}
             flask.session['id_token'] = id_token.to_dict()
             flask.session['id_token_jwt'] = id_token.to_jwt()
-            end_session_redirect = authn._logout()
 
+            end_session_redirect = authn._logout()
             assert all(k not in flask.session for k in ['access_token', 'userinfo', 'id_token', 'id_token_jwt'])
 
             assert end_session_redirect.status_code == 303
@@ -222,10 +216,10 @@ class TestOIDCAuthentication(object):
             flask.session['userinfo'] = {'foo': 'bar', 'abc': 'xyz'}
             flask.session['id_token'] = id_token.to_dict()
             flask.session['id_token_jwt'] = id_token.to_jwt()
-            end_session_redirect = authn._logout()
 
+            end_session_redirect = authn._logout()
             assert all(k not in flask.session for k in ['access_token', 'userinfo', 'id_token', 'id_token_jwt'])
-            assert end_session_redirect is None
+        assert end_session_redirect is None
 
     def test_oidc_logout_redirects_to_provider(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
