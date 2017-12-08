@@ -15,65 +15,54 @@
 """
 
 import functools
-
 import logging
+import time
 
 import flask
 from flask import current_app
 from flask.helpers import url_for
+from oic import rndstr
 from oic.oic import Client
 from oic.oic.message import AuthorizationResponse
 from oic.oic.message import EndSessionRequest
 from oic.oic.message import ProviderConfigurationResponse
 from oic.oic.message import RegistrationRequest
-from oic import rndstr
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
-
-import time
 from werkzeug.utils import redirect
-
 
 logger = logging.getLogger(__name__)
 
 
-class Session(object):
+class _Session(object):
+    """Session object for user login state.
 
-    """Session object for refresh tokens.
-
-    First class object for comparison of date times during session handling.
-    Wraps comparison of date time necessary for proper session handling.
+    Wraps comparison of times necessary for session handling.
     """
 
-    def __init__(self, flask_session, client_registration_info):
+    def __init__(self, flask_session, session_refresh_interval_seconds=None):
         self.flask_session = flask_session
-        self.client_registration_info = client_registration_info
+        self.session_refresh_interval_seconds = session_refresh_interval_seconds
+
+    def is_authenticated(self):
+        """
+        flask_session is empty when the session hasn't been initialised or has expired.
+        Thus checking for existence of any item is enough to determine if we're authenticated.
+        """
+
+        return self.flask_session.get('last_authenticated') is not None
+
+    def should_refresh(self):
+        return self._supports_refresh() and self._needs_refresh()
 
     def _refresh_time(self):
         last = self.flask_session.get('last_authenticated')
-        refresh = self.client_registration_info['session_refresh_interval_seconds']
+        refresh = self.session_refresh_interval_seconds
         return last + refresh
 
-    def authenticated(self):
-        """Flask session object
+    def _supports_refresh(self):
+        return self.session_refresh_interval_seconds is not None
 
-        Dictionary is set to empty dict when the
-        session expires or is invalid. Thus checking for any item in the dict
-        is a valid way to check if we're authenticated.
-
-        The oic library already verified the id_token signature and expiration
-        time at this point.
-
-        Finally, unless the caller of the library overrides this, the session
-        expiration itself is set to the id_token expiration so this check is
-        also already taken care of.
-        """
-
-        return self.flask_session.get('id_token_jwt') != None
-
-    def supports_refresh(self):
-        return 'session_refresh_interval_seconds' in self.client_registration_info
-
-    def needs_refresh(self):
+    def _needs_refresh(self):
         return self._refresh_time() < time.time()
 
 
@@ -296,23 +285,14 @@ class OIDCAuthentication(object):
     def oidc_auth(self, view_func):
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
-            # Initialize first class session object.
-            session = Session(
+            session = _Session(
                 flask_session=flask.session,
-                client_registration_info=self.client_registration_info
-            )
-            # First check to see if refresh_token is enabled.
-            # Check to see if the session needs to be refreshed.
-            # If so call non-interactive refresh.
-            if session.supports_refresh() and session.authenticated():
-                if session.needs_refresh() is True:
-                    logger.debug('user session needs refresh')
-                    return self._authenticate(interactive=False)
-                else:
-                    logger.debug('user is already authenticated')
-                    return view_func(*args, **kwargs)
-            # Otherwise do regular session handling.
-            elif not session.supports_refresh() and session.authenticated():
+                session_refresh_interval_seconds=self.client_registration_info.get('session_refresh_interval_seconds'))
+
+            if session.should_refresh():
+                logger.debug('user auth will be refreshed "silently"')
+                return self._authenticate(interactive=False)
+            elif session.is_authenticated():
                 logger.debug('user is already authenticated')
                 return view_func(*args, **kwargs)
             else:
