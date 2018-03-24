@@ -195,9 +195,11 @@ class OIDCAuthentication(object):
         if 'id_token' in token_resp:
             id_token = token_resp['id_token']
             logger.debug('received id token: %s', id_token.to_json())
-
-            if id_token['nonce'] != flask.session.pop('nonce'):
-                raise ValueError('The \'nonce\' parameter does not match.')
+            
+            # nonce is optional attribute
+            if 'nonce' in id_token:
+               if id_token['nonce'] != flask.session.pop('nonce'):
+                  raise ValueError('The \'nonce\' parameter does not match.')
 
             flask.session['id_token'] = id_token.to_dict()
             flask.session['id_token_jwt'] = id_token.to_jwt()
