@@ -14,14 +14,12 @@ matrix:
       env: TOXENV=py27
 
 install:
-  - pip install -U tox
+  - pip install -U setuptools tox
+  - pip install -e .
+  - pip install pytest-cov codecov -r tests/requirements.txt
 
 script:
   - tox
-
-before_install:
-  - pip install -e .
-  - pip install pytest-cov codecov -r tests/requirements.txt
 
 after_success:
   - py.test tests/ --cov=./
