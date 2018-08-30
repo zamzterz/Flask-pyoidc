@@ -74,11 +74,10 @@ class OIDCAuthentication(object):
     OIDC identity provider.
     """
 
-    def __init__(self, flask_app, client_registration_info=None,
+    def __init__(self, app=None, client_registration_info=None,
                  issuer=None, provider_configuration_info=None,
                  userinfo_endpoint_method='POST',
                  extra_request_args=None):
-        self.app = flask_app
         self.userinfo_endpoint_method = userinfo_endpoint_method
         self.extra_request_args = extra_request_args or {}
 
@@ -102,21 +101,23 @@ class OIDCAuthentication(object):
 
         self.client_registration_info = client_registration_info or {}
 
-        # setup redirect_uri as a flask route
-        self.app.add_url_rule('/redirect_uri', 'redirect_uri', self._handle_authentication_response)
-
-        # dynamically add the Flask redirect uri to the client info
-        with self.app.app_context():
-            self.client_registration_info['redirect_uris'] \
-                = url_for('redirect_uri')
-
-        # if non-discovery client add the provided info from the constructor
-        if client_registration_info and 'client_id' in client_registration_info:
-            # static client info provided
-            self.client.store_registration_info(RegistrationRequest(**client_registration_info))
-
         self.logout_view = None
         self._error_view = None
+        if app:
+            self.init_app(app)
+
+    def init_app(self, app):
+        # setup redirect_uri as a flask route
+        app.add_url_rule('/redirect_uri', 'redirect_uri', self._handle_authentication_response)
+
+        # dynamically add the Flask redirect uri to the client info
+        with app.app_context():
+            self.client_registration_info['redirect_uris'] = url_for('redirect_uri')
+
+        # if non-discovery client add the provided info from the constructor
+        if 'client_id' in self.client_registration_info:
+            # static client info provided
+            self.client.store_registration_info(RegistrationRequest(**self.client_registration_info))
 
     def _authenticate(self, interactive=True):
         if 'client_id' not in self.client_registration_info:
@@ -124,7 +125,7 @@ class OIDCAuthentication(object):
             # do dynamic registration
             if self.logout_view:
                 # handle support for logout
-                with self.app.app_context():
+                with current_app.app_context():
                     post_logout_redirect_uri = url_for(self.logout_view.__name__, _external=True)
                     logger.debug('built post_logout_redirect_uri=%s', post_logout_redirect_uri)
                     self.client_registration_info['post_logout_redirect_uris'] = [post_logout_redirect_uri]

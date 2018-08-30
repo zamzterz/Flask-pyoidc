@@ -50,14 +50,19 @@ class TestOIDCAuthentication(object):
         self.app = Flask(__name__)
         self.app.config.update({'SERVER_NAME': 'localhost', 'SECRET_KEY': 'test_key'})
 
+    def get_instance(self, kwargs):
+        authn = OIDCAuthentication(**kwargs)
+        authn.init_app(self.app)
+        return authn
+
     @responses.activate
     def test_store_internal_redirect_uri_on_static_client_reg(self):
         responses.add(responses.GET, ISSUER + '/.well-known/openid-configuration',
                       body=json.dumps(dict(issuer=ISSUER, token_endpoint=ISSUER + '/token')),
                       content_type='application/json')
 
-        authn = OIDCAuthentication(self.app, issuer=ISSUER,
-                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        authn = self.get_instance(dict(issuer=ISSUER,
+                                       client_registration_info=dict(client_id='abc', client_secret='foo')))
         assert len(authn.client.registration_response['redirect_uris']) == 1
         assert authn.client.registration_response['redirect_uris'][0] == 'http://localhost/redirect_uri'
 
@@ -69,9 +74,9 @@ class TestOIDCAuthentication(object):
         state = 'state'
         nonce = 'nonce'
         sub = 'foobar'
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER, 'token_endpoint': '/token'},
-                                   client_registration_info={'client_id': 'foo'},
-                                   userinfo_endpoint_method=method)
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER, 'token_endpoint': '/token'},
+                                       client_registration_info={'client_id': 'foo'},
+                                       userinfo_endpoint_method=method))
         authn.client.do_access_token_request = MagicMock(
             return_value=AccessTokenResponse(**{'id_token': IdToken(**{'sub': sub, 'nonce': nonce}),
                                                 'access_token': 'access_token'})
@@ -87,9 +92,9 @@ class TestOIDCAuthentication(object):
 
     def test_no_userinfo_request_is_done_if_no_userinfo_endpoint_method_is_specified(self):
         state = 'state'
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'},
-                                   userinfo_endpoint_method=None)
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info={'client_id': 'foo'},
+                                       userinfo_endpoint_method=None))
         userinfo_request_mock = MagicMock()
         authn.client.do_user_info_request = userinfo_request_mock
         authn._do_userinfo_request(state, None)
@@ -97,9 +102,9 @@ class TestOIDCAuthentication(object):
 
     def test_authenticatate_with_extra_request_parameters(self):
         extra_params = {"foo": "bar", "abc": "xyz"}
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'},
-                                   extra_request_args=extra_params)
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info={'client_id': 'foo'},
+                                       extra_request_args=extra_params))
 
         with self.app.test_request_context('/'):
             a = authn._authenticate()
@@ -107,8 +112,8 @@ class TestOIDCAuthentication(object):
         assert set(extra_params.items()).issubset(set(request_params.items()))
 
     def test_reauthenticate_if_no_session(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo'})
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info={'client_id': 'foo'}))
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -119,8 +124,9 @@ class TestOIDCAuthentication(object):
         assert not callback_mock.called
 
     def test_reauthenticate_silent_if_refresh_expired(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo', 'session_refresh_interval_seconds': 1})
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info={'client_id': 'foo',
+                                                                 'session_refresh_interval_seconds': 1}))
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -133,9 +139,9 @@ class TestOIDCAuthentication(object):
         assert not callback_mock.called
 
     def test_dont_reauthenticate_silent_if_authentication_not_expired(self):
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'session_refresh_interval_seconds': 999})
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info={'client_id': 'foo',
+                                                                 'session_refresh_interval_seconds': 999}))
         client_mock = MagicMock()
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
@@ -164,11 +170,11 @@ class TestOIDCAuthentication(object):
         responses.add(responses.POST, userinfo_endpoint,
                       body=json.dumps(userinfo_response),
                       content_type='application/json')
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER,
-                                                                'token_endpoint': token_endpoint,
-                                                                'userinfo_endpoint': userinfo_endpoint},
-                                   client_registration_info={'client_id': 'foo', 'client_secret': 'foo'})
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER,
+                                         'token_endpoint': token_endpoint,
+                                         'userinfo_endpoint': userinfo_endpoint},
+            client_registration_info={'client_id': 'foo', 'client_secret': 'foo'}))
 
         self.app.config.update({'SESSION_PERMANENT': True})
         with self.app.test_request_context('/redirect_uri?state=test&code=test'):
@@ -182,11 +188,11 @@ class TestOIDCAuthentication(object):
     def test_logout(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         post_logout_uri = 'https://client.example.com/post_logout'
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER,
-                                                                'end_session_endpoint': end_session_endpoint},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER,
+                                         'end_session_endpoint': end_session_endpoint},
+            client_registration_info={'client_id': 'foo',
+                                      'post_logout_redirect_uris': [post_logout_uri]}))
         id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
         with self.app.test_request_context('/logout'):
             flask.session['access_token'] = 'abcde'
@@ -206,10 +212,10 @@ class TestOIDCAuthentication(object):
 
     def test_logout_handles_provider_without_end_session_endpoint(self):
         post_logout_uri = 'https://client.example.com/post_logout'
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER},
+            client_registration_info={'client_id': 'foo',
+                                      'post_logout_redirect_uris': [post_logout_uri]}))
         id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
         with self.app.test_request_context('/logout'):
             flask.session['access_token'] = 'abcde'
@@ -224,11 +230,11 @@ class TestOIDCAuthentication(object):
     def test_oidc_logout_redirects_to_provider(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         post_logout_uri = 'https://client.example.com/post_logout'
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER,
-                                                                'end_session_endpoint': end_session_endpoint},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER,
+                                         'end_session_endpoint': end_session_endpoint},
+            client_registration_info={'client_id': 'foo',
+                                      'post_logout_redirect_uris': [post_logout_uri]}))
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
         id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
@@ -241,11 +247,11 @@ class TestOIDCAuthentication(object):
     def test_oidc_logout_handles_redirects_from_provider(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         post_logout_uri = 'https://client.example.com/post_logout'
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER,
-                                                                'end_session_endpoint': end_session_endpoint},
-                                   client_registration_info={'client_id': 'foo',
-                                                             'post_logout_redirect_uris': [post_logout_uri]})
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER,
+                                         'end_session_endpoint': end_session_endpoint},
+            client_registration_info={'client_id': 'foo',
+                                      'post_logout_redirect_uris': [post_logout_uri]}))
         callback_mock = MagicMock()
         callback_mock.__name__ = 'test_callback'  # required for Python 2
         state = 'end_session_123'
@@ -258,8 +264,8 @@ class TestOIDCAuthentication(object):
     def test_authentication_error_reponse_calls_to_error_view_if_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error'}
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info=dict(client_id='abc', client_secret='foo')))
         error_view_mock = MagicMock()
         authn._error_view = error_view_mock
         with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(
@@ -271,8 +277,8 @@ class TestOIDCAuthentication(object):
     def test_authentication_error_reponse_returns_default_error_if_no_error_view_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error'}
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER},
+                                       client_registration_info=dict(client_id='abc', client_secret='foo')))
         with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(
                 error=urlencode(error_response), state=state)):
             flask.session['state'] = state
@@ -287,9 +293,9 @@ class TestOIDCAuthentication(object):
                       body=json.dumps(error_response),
                       content_type='application/json')
 
-        authn = OIDCAuthentication(self.app,
-                                   provider_configuration_info={'issuer': ISSUER, 'token_endpoint': token_endpoint},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        authn = self.get_instance(dict(
+            provider_configuration_info={'issuer': ISSUER, 'token_endpoint': token_endpoint},
+            client_registration_info=dict(client_id='abc', client_secret='foo')))
         error_view_mock = MagicMock()
         authn._error_view = error_view_mock
         state = 'test_tate'
@@ -306,9 +312,9 @@ class TestOIDCAuthentication(object):
                       body=json.dumps(error_response),
                       content_type='application/json')
 
-        authn = OIDCAuthentication(self.app, provider_configuration_info={'issuer': ISSUER,
-                                                                          'token_endpoint': token_endpoint},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo'))
+        authn = self.get_instance(dict(provider_configuration_info={'issuer': ISSUER,
+                                                                    'token_endpoint': token_endpoint},
+                                       client_registration_info=dict(client_id='abc', client_secret='foo')))
         state = 'test_tate'
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
             flask.session['state'] = state
