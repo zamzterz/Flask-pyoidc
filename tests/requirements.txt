@@ -1,5 +1,4 @@
 pytest
 mock
-responses==0.5.1
+responses
 six
-oic
