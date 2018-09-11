@@ -13,17 +13,31 @@ app.config.update({'SERVER_NAME': 'localhost:5000',
                    'PREFERRED_URL_SCHEME': 'http',
                    'DEBUG': True})
 
-ISSUER = 'https://provider.example.com'
-CLIENT_ID = 'client1'
-CLIENT_SECRET = 'very_secret'
-provider_configuration = ProviderConfiguration(issuer=ISSUER,
-                                               client_metadata=ClientMetadata(CLIENT_ID, CLIENT_SECRET))
-auth = OIDCAuthentication(provider_configuration)
+ISSUER1 = 'https://provider1.example.com'
+CLIENT1 = 'client@provider1'
+PROVIDER_NAME1 = 'provider1'
+PROVIDER_CONFIG1 = ProviderConfiguration(issuer=ISSUER1,
+                                         client_metadata=ClientMetadata(CLIENT1, 'secret1'))
+ISSUER2 = 'https://provider2.example.com'
+CLIENT2 = 'client@provider2'
+PROVIDER_NAME2 = 'provider2'
+PROVIDER_CONFIG2 = ProviderConfiguration(issuer=ISSUER2,
+                                         client_metadata=ClientMetadata(CLIENT2, 'secret2'))
+auth = OIDCAuthentication({PROVIDER_NAME1: PROVIDER_CONFIG1, PROVIDER_NAME2: PROVIDER_CONFIG2})
 
 
 @app.route('/')
-@auth.oidc_auth
-def index():
+@auth.oidc_auth(PROVIDER_NAME1)
+def login1():
+    user_session = UserSession(flask.session)
+    return jsonify(access_token=user_session.access_token,
+                   id_token=user_session.id_token,
+                   userinfo=user_session.userinfo)
+
+
+@app.route('/login2')
+@auth.oidc_auth(PROVIDER_NAME2)
+def login2():
     user_session = UserSession(flask.session)
     return jsonify(access_token=user_session.access_token,
                    id_token=user_session.id_token,

@@ -38,15 +38,16 @@ class OIDCAuthentication(object):
 
     REDIRECT_URI_ENDPOINT = 'redirect_uri'
 
-    def __init__(self, provider_configuration, app=None):
+    def __init__(self, provider_configurations, app=None):
         """
         Args:
-            provider_configuration (flask_pyoidc.provider_configuration.ProviderConfiguration): provider configuration
+            provider_configurations (Mapping[str, flask_pyoidc.provider_configuration.ProviderConfiguration]):
+                provider configurations by name
             app (flask.app.Flask): optional Flask app
         """
-        self._provider_configuration = provider_configuration
+        self._provider_configurations = provider_configurations
 
-        self.client = None
+        self.clients = None
         self._logout_view = None
         self._error_view = None
 
@@ -59,24 +60,27 @@ class OIDCAuthentication(object):
 
         # dynamically add the Flask redirect uri to the client info
         with app.app_context():
-            self.client = PyoidcFacade(self._provider_configuration, url_for(self.REDIRECT_URI_ENDPOINT))
+            self.clients = {
+                name: PyoidcFacade(configuration, url_for(self.REDIRECT_URI_ENDPOINT))
+                for (name, configuration) in self._provider_configurations.items()
+            }
 
     def _get_post_logout_redirect_uri(self):
         if self._logout_view:
             return url_for(self._logout_view.__name__, _external=True)
         return None
 
-    def _register_client(self):
+    def _register_client(self, client):
         client_registration_args = {}
         post_logout_redirect_uri = self._get_post_logout_redirect_uri()
         if post_logout_redirect_uri:
             logger.debug('registering with post_logout_redirect_uri=%s', post_logout_redirect_uri)
             client_registration_args['post_logout_redirect_uris'] = [post_logout_redirect_uri]
-        self.client.register(client_registration_args)
+        client.register(client_registration_args)
 
-    def _authenticate(self, interactive=True):
-        if not self.client.is_registered():
-            self._register_client()
+    def _authenticate(self, client, interactive=True):
+        if not client.is_registered():
+            self._register_client(client)
 
         flask.session['destination'] = flask.request.url
         flask.session['state'] = rndstr()
@@ -88,15 +92,17 @@ class OIDCAuthentication(object):
         if not interactive:
             extra_auth_params['prompt'] = 'none'
 
-        login_url = self.client.authentication_request(flask.session['state'],
-                                                       flask.session['nonce'],
-                                                       extra_auth_params)
+        login_url = client.authentication_request(flask.session['state'],
+                                                  flask.session['nonce'],
+                                                  extra_auth_params)
         return redirect(login_url)
 
     def _handle_authentication_response(self):
+        client = self.clients[UserSession(flask.session).current_provider]
+
         # parse authentication response
         query_string = flask.request.query_string.decode('utf-8')
-        authn_resp = self.client.parse_authentication_response(query_string)
+        authn_resp = client.parse_authentication_response(query_string)
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
         if authn_resp['state'] != flask.session.pop('state'):
@@ -105,7 +111,7 @@ class OIDCAuthentication(object):
         if 'error' in authn_resp:
             return self._handle_error_response(authn_resp)
 
-        token_resp = self.client.token_request(authn_resp['code'])
+        token_resp = client.token_request(authn_resp['code'])
 
         if 'error' in token_resp:
             return self._handle_error_response(token_resp)
@@ -129,7 +135,7 @@ class OIDCAuthentication(object):
                 flask.session.permanent_session_lifetime = id_token['exp'] - time.time()
 
         # do userinfo request
-        userinfo = self.client.userinfo_request(access_token)
+        userinfo = client.userinfo_request(access_token)
         userinfo_claims = None
         if userinfo:
             userinfo_claims = userinfo.to_dict()
@@ -149,30 +155,41 @@ class OIDCAuthentication(object):
 
         return 'Something went wrong with the authentication, please try to login again.'
 
-    def oidc_auth(self, view_func):
-        @functools.wraps(view_func)
-        def wrapper(*args, **kwargs):
-            session = UserSession(flask.session)
+    def oidc_auth(self, provider_name):
+        if provider_name not in self._provider_configurations:
+            raise ValueError(
+                "Provider name '{}' not in configured providers: {}.".format(provider_name,
+                                                                             self._provider_configurations.keys())
+            )
 
-            if session.should_refresh(self.client.session_refresh_interval_seconds):
-                logger.debug('user auth will be refreshed "silently"')
-                return self._authenticate(interactive=False)
-            elif session.is_authenticated():
-                logger.debug('user is already authenticated')
-                return view_func(*args, **kwargs)
-            else:
-                logger.debug('user not authenticated, start flow')
-                return self._authenticate()
+        def oidc_decorator(view_func):
+            @functools.wraps(view_func)
+            def wrapper(*args, **kwargs):
+                session = UserSession(flask.session, provider_name)
+                client = self.clients[session.current_provider]
 
-        return wrapper
+                if session.should_refresh(client.session_refresh_interval_seconds):
+                    logger.debug('user auth will be refreshed "silently"')
+                    return self._authenticate(client, interactive=False)
+                elif session.is_authenticated():
+                    logger.debug('user is already authenticated')
+                    return view_func(*args, **kwargs)
+                else:
+                    logger.debug('user not authenticated, start flow')
+                    return self._authenticate(client)
+
+            return wrapper
+
+        return oidc_decorator
 
     def _logout(self):
         logger.debug('user logout')
         session = UserSession(flask.session)
         id_token_jwt = session.id_token_jwt
+        client = self.clients[session.current_provider]
         session.clear()
 
-        if self.client.provider_end_session_endpoint:
+        if client.provider_end_session_endpoint:
             flask.session['end_session_state'] = rndstr()
 
             end_session_request = EndSessionRequest(id_token_hint=id_token_jwt,
@@ -181,7 +198,7 @@ class OIDCAuthentication(object):
 
             logger.debug('send endsession request: %s', end_session_request.to_json())
 
-            return redirect(end_session_request.request(self.client.provider_end_session_endpoint), 303)
+            return redirect(end_session_request.request(client.provider_end_session_endpoint), 303)
         return None
 
     def oidc_logout(self, view_func):
