@@ -22,5 +22,5 @@ script:
   - tox
 
 after_success:
-  - py.test tests/ --cov=./
+  - py.test tests/ example/ --cov=./
   - codecov
