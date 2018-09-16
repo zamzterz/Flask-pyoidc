@@ -4,10 +4,15 @@
 [![codecov.io](https://codecov.io/github/zamzterz/Flask-pyoidc/coverage.svg?branch=master)](https://codecov.io/github/its-dirg/Flask-pyoidc?branch=master)
 [![Build Status](https://travis-ci.org/zamzterz/Flask-pyoidc.svg?branch=master)](https://travis-ci.org/zamzterz/Flask-pyoidc)
 
-This Flask extension provides simple OpenID Connect authentication, by using [pyoidc](https://github.com/rohe/pyoidc).
-Currently only ["Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)) is supported.
+This Flask extension provides simple OpenID Connect authentication, backed by [pyoidc](https://github.com/rohe/pyoidc).
 
-## Usage
+*Currently only ["Authorization Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) is supported.*
+
+## Example
+
+Have a look at the [example Flask app](example/app.py) for a full example of how to use this extension.
+
+## Configuration
 
 ### Provider and client configuration
 
@@ -19,87 +24,112 @@ of the client registration modes.
 
 To use a provider which supports dynamic discovery it suffices to specify the issuer URL:
 ```python
-auth = OIDCAuthentication(issuer='https://op.example.com')
+from flask_pyoidc.provider_configuration import ProviderConfiguration
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+
+auth = OIDCAuthentication(ProviderConfiguration(issuer='https://op.example.com', [client configuration]))
 ```
 
 #### Static provider configuration
 
-To use a provider not supporting dynamic discovery, the static provider configuration can be specified:
+To use a provider not supporting dynamic discovery, the static provider metadata can be specified:
 ```python
-provider_config = {
-    'issuer': 'https://op.example.com',
-    'authorization_endpoint': 'https://op.example.com/authorize',
-    'token_endpoint': 'https://op.example.com/token',
-    'userinfo_endpoint': 'https://op.example.com/userinfo'
-}
-auth = OIDCAuthentication(provider_configuration_info=provider_config)
+from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+
+provider_metadata = ProviderMetadata(issuer='https://op.example.com', 
+                                     authorization_endpoint='https://op.example.com/auth',
+                                     jwks_uri='https://op.example.com/jwks')
+auth = OIDCAuthentication(ProviderConfiguration(provider_metadata=provider_metadata, [client configuration]))
 ```
 
 See the OpenID Connect specification for more information about the
 [provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
 
-
 #### Static client registration
 
-If you have already registered a client with the provider all client registration information can be specified:
+If you have already registered a client with the provider, specify the client credentials directly:
 ```python
-client_info = {
-    'client_id': 'cl41ekfb9j',
-    'client_secret': 'm1C659wLipXfUUR50jlZ',
+from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
-}
-auth = OIDCAuthentication(client_registration_info=client_info)
+client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wLipXfUUR50jlZ')
+auth = OIDCAuthentication(ProviderConfiguration([provider configuration], client_metadata=client_metadata))
 ```
 
 **Note: The redirect URIs registered with the provider MUST include `<application_url>/redirect_uri`,
-where `<application_url>` is the URL for the Flask application.**
-
-#### Session refresh
-
-If your OpenID Connect provider supports the `prompt=none` parameter, the library can automatically support session refresh on your behalf.
-This ensures that the user session attributes (OIDC claims, user being active, etc.) are valid and up-to-date without having to log the user out and back in.
-To use the feature simply pass the parameter requesting the session refresh interval as such:
-```python
-client_info = {
-    'client_id': 'cl41ekfb9j',
-    'client_secret': 'm1C659wLipXfUUR50jlZ',
-    'session_refresh_interval_seconds': 900
-
-}
-auth = OIDCAuthentication(client_registration_info=client_info)
-```
-
-**Note: The client will still be logged out at whichever expiration time you set for the Flask session.
+where `<application_url>` is the URL of the Flask application.**
 
 #### Dynamic client registration
 
-If no `client_id` is specified in the `client_registration_info` constructor parameter, the library will try to
-dynamically register a client with the specified provider.
+To dynamically register a new client for your application, the required client registration info can be specified:
 
-### Protect an endpoint by authentication
+```python
+from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+
+client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@rp.example.com'])
+auth = OIDCAuthentication(ProviderConfiguration([provider configuration], client_registration_info=client_registration_info))
+```
+
+### Flask configuration
+
+The application using this extension **MUST** set the following
+[builtin configuration values of Flask](http://flask.pocoo.org/docs/config/#builtin-configuration-values):
+
+* `SERVER_NAME`: **MUST** be the same as `<flask_url>` if using static client registration.
+* `SECRET_KEY`: This extension relies on [Flask sessions](http://flask.pocoo.org/docs/quickstart/#sessions), which
+   requires `SECRET_KEY`.
+
+You may also configure the way the user sessions created by this extension are handled:
+
+* `OIDC_SESSION_PERMANENT`: If set to `True` (which is the default) the user session will live until the ID Token
+  expiration time. If set to `False` the session will be deleted when the user closes the browser.
+
+### Session refresh
+
+If your provider supports the `prompt=none` authentication request parameter, this extension can automatically refresh
+user sessions. This ensures that the user attributes (OIDC claims, user being active, etc.) are kept up-to-date without
+having to log the user out and back in. To enable and configure the feature, specify the interval (in seconds) between
+refreshes:
+```python
+from flask_pyoidc.provider_configuration import ProviderConfiguration
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+
+auth = OIDCAuthentication(ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/client config])
+```
+
+**Note: The user will still be logged out when the session expires (as described above).**
+
+## Protect an endpoint by authentication
 
 To add authentication to one of your endpoints use the `oidc_auth` decorator:
 ```python
 import flask
 from flask import Flask, jsonify
 
+from flask_pyoidc.user_session import UserSession
+
 app = Flask(__name__)
 
-@app.route('/')
+@app.route('/login')
 @auth.oidc_auth
 def index():
-    return jsonify(id_token=flask.session['id_token'], access_token=flask.session['access_token'],
-                   userinfo=flask.session['userinfo'])
+    user_session = UserSession(flask.session)
+    return jsonify(access_token=user_session.access_token,
+                   id_token=user_session.id_token,
+                   userinfo=user_session.userinfo)
 ```
 
-This extension will place three things in the session if they are received from the provider:
+After a successful login, this extension will place three things in the user session (if they are received from the
+provider):
 * [ID Token](http://openid.net/specs/openid-connect-core-1_0.html#IDToken)
-* [access token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
-* [userinfo response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
+* [Access Token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
+* [Userinfo Response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
   
-### User logout
+## User logout
 
-To support user logout use the `oidc_logout` decorator:
+To support user logout, use the `oidc_logout` decorator:
 ```python
 @app.route('/logout')
 @auth.oidc_logout
@@ -108,12 +138,13 @@ def logout():
 ```
 
 This extension also supports [RP-Initiated Logout](http://openid.net/specs/openid-connect-session-1_0.html#RPLogout),
-if the provider allows it.
+if the provider allows it. Make sure the `end_session_endpoint` is defined in the provider metadata to enable notifying
+the provider when the user logs out. 
   
-### Specify the error view
+## Specify the error view
 
 If an OAuth error response is received, either in the authentication or token response, it will be passed to the
-specified error view. An error view is specified by using the `error_view` decorator:
+"error view", specified using the `error_view` decorator:
 
 ```python
 from flask import jsonify
@@ -124,25 +155,7 @@ def error(error=None, error_description=None):
 ```
 
 The function specified as the error view MUST accept two parameters, `error` and `error_description`, which corresponds
-to the [OIDC/OAuth error parameters](http://openid.net/specs/openid-connect-core-1_0.html#AuthError).
+to the [OIDC error parameters](http://openid.net/specs/openid-connect-core-1_0.html#AuthError), and return the content
+that should be displayed to the user.
 
-If no error view is specified a generic error message will be displayed to the user.
-
-
-## Configuration
-
-The application using this extension MUST set the following [builtin configuration values of Flask](http://flask.pocoo.org/docs/0.10/config/#builtin-configuration-values):
-
-* `SERVER_NAME` (MUST be the same as `<flask_url>` if using static client registration)
-* `SECRET_KEY` (this extension relies on [Flask sessions](http://flask.pocoo.org/docs/0.11/quickstart/#sessions), which requires `SECRET_KEY`)
-
-You may also configure the way Flask sessions handles the user session:
-
-* `PERMANENT_SESSION` (added by this extension; makes the session cookie expire after a configurable length of time instead of being tied to the browser session)
-* `PERMANENT_SESSION_LIFETIME` (the lifetime of a permanent session)
-
-See the [Flask documentation](http://flask.pocoo.org/docs/0.11/config/#builtin-configuration-values) for an exhaustive list of configuration options.
-
-## Example
-
-Have a look at the example Flask app in [app.py](example/app.py) for an idea of how to use it.
+If no error view is specified, a generic error message will be displayed to the user.
