@@ -1,16 +1,30 @@
 import time
 
 
+class UninitialisedSession(Exception):
+    pass
+
+
 class UserSession(object):
     """Session object for user login state.
 
     Wraps comparison of times necessary for session handling.
     """
 
-    KEYS = ['access_token', 'id_token', 'id_token_jwt', 'last_authenticated', 'userinfo']
+    KEYS = ['access_token', 'current_provider', 'id_token', 'id_token_jwt', 'last_authenticated', 'userinfo']
 
-    def __init__(self, session_storage):
+    def __init__(self, session_storage, provider_name=None):
         self._session_storage = session_storage
+        if 'current_provider' not in self._session_storage and not provider_name:
+            raise UninitialisedSession("Trying to pick-up uninitialised session without specifying 'provider_name'")
+
+        if provider_name:
+            if 'current_provider' in self._session_storage and \
+                    provider_name != self._session_storage['current_provider']:
+                # provider has changed, initialise new session
+                self.clear()
+
+            self._session_storage['current_provider'] = provider_name
 
     def is_authenticated(self):
         """
@@ -67,3 +81,7 @@ class UserSession(object):
     @property
     def userinfo(self):
         return self._session_storage['userinfo']
+
+    @property
+    def current_provider(self):
+        return self._session_storage['current_provider']

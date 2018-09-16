@@ -25,9 +25,8 @@ of the client registration modes.
 To use a provider which supports dynamic discovery it suffices to specify the issuer URL:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
-auth = OIDCAuthentication(ProviderConfiguration(issuer='https://op.example.com', [client configuration]))
+config = ProviderConfiguration(issuer='https://op.example.com', [client configuration])
 ```
 
 #### Static provider configuration
@@ -35,12 +34,11 @@ auth = OIDCAuthentication(ProviderConfiguration(issuer='https://op.example.com',
 To use a provider not supporting dynamic discovery, the static provider metadata can be specified:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 provider_metadata = ProviderMetadata(issuer='https://op.example.com', 
                                      authorization_endpoint='https://op.example.com/auth',
                                      jwks_uri='https://op.example.com/jwks')
-auth = OIDCAuthentication(ProviderConfiguration(provider_metadata=provider_metadata, [client configuration]))
+config = ProviderConfiguration(provider_metadata=provider_metadata, [client configuration])
 ```
 
 See the OpenID Connect specification for more information about the
@@ -51,10 +49,9 @@ See the OpenID Connect specification for more information about the
 If you have already registered a client with the provider, specify the client credentials directly:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wLipXfUUR50jlZ')
-auth = OIDCAuthentication(ProviderConfiguration([provider configuration], client_metadata=client_metadata))
+config = ProviderConfiguration([provider configuration], client_metadata=client_metadata)
 ```
 
 **Note: The redirect URIs registered with the provider MUST include `<application_url>/redirect_uri`,
@@ -66,10 +63,9 @@ To dynamically register a new client for your application, the required client r
 
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@rp.example.com'])
-auth = OIDCAuthentication(ProviderConfiguration([provider configuration], client_registration_info=client_registration_info))
+config = ProviderConfiguration([provider configuration], client_registration_info=client_registration_info)
 ```
 
 ### Flask configuration
@@ -94,9 +90,8 @@ having to log the user out and back in. To enable and configure the feature, spe
 refreshes:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
-auth = OIDCAuthentication(ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/client config])
+config = ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/client config]
 ```
 
 **Note: The user will still be logged out when the session expires (as described above).**
@@ -108,12 +103,16 @@ To add authentication to one of your endpoints use the `oidc_auth` decorator:
 import flask
 from flask import Flask, jsonify
 
+from flask_pyoidc.provider_configuration import ProviderConfiguration
 from flask_pyoidc.user_session import UserSession
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 app = Flask(__name__)
+config = ProviderConfiguration(...)
+auth = OIDCAuthentication({'default': config}, app)
 
 @app.route('/login')
-@auth.oidc_auth
+@auth.oidc_auth('default')
 def index():
     user_session = UserSession(flask.session)
     return jsonify(access_token=user_session.access_token,
@@ -126,6 +125,29 @@ provider):
 * [ID Token](http://openid.net/specs/openid-connect-core-1_0.html#IDToken)
 * [Access Token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
 * [Userinfo Response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
+
+### Using multiple providers
+
+To allow users to login with multiple different providers, configure all of them in the `OIDCAuthentication`
+constructor and specify which one to use by name for each endpoint:
+```python
+from flask_pyoidc.provider_configuration import ProviderConfiguration
+from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+
+app = Flask(__name__)
+auth = OIDCAuthentication({'provider1': ProviderConfiguration(...), 'provider2': ProviderConfiguration(...)}, app)
+
+@app.route('/login1')
+@auth.oidc_auth('provider1')
+def login1():
+    pass
+
+@app.route('/login2')
+@auth.oidc_auth('provider2')
+def login2():
+    pass
+```
+
   
 ## User logout
 
