@@ -11,8 +11,6 @@ app = Flask(__name__)
 app.config.update({'SERVER_NAME': 'localhost:5000',
                    'SECRET_KEY': 'dev_key',  # make sure to change this!!
                    'PREFERRED_URL_SCHEME': 'http',
-                   'SESSION_PERMANENT': True,  # turn on flask session support
-                   'PERMANENT_SESSION_LIFETIME': 2592000,  # session time in seconds (30 days)
                    'DEBUG': True})
 
 ISSUER = 'https://provider.example.com'

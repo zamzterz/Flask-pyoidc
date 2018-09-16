@@ -195,7 +195,6 @@ class TestOIDCAuthentication(object):
         responses.add(responses.POST, token_endpoint, json=token_response)
 
         authn = self.get_authn_instance(provider_metadata_extras={'token_endpoint': token_endpoint})
-        self.app.config.update({'SESSION_PERMANENT': True})
         with self.app.test_request_context('/redirect_uri?state={}&code=test'.format(state)):
             flask.session['destination'] = '/'
             flask.session['state'] = state

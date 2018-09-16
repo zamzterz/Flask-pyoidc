@@ -124,7 +124,7 @@ class OIDCAuthentication(object):
             id_token_claims = id_token.to_dict()
             id_token_jwt = id_token.to_jwt()
             # set the session as requested by the OP if we have no default
-            if current_app.config.get('SESSION_PERMANENT'):
+            if current_app.config.get('OIDC_SESSION_PERMANENT', True):
                 flask.session.permanent = True
                 flask.session.permanent_session_lifetime = id_token['exp'] - time.time()
 
