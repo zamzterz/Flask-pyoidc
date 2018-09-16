@@ -7,3 +7,4 @@ dist/
 .cache/
 .coverage
 coverage.xml
+.pytest_cache
