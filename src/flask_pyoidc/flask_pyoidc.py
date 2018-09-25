@@ -210,7 +210,8 @@ class OIDCAuthentication(object):
         def wrapper(*args, **kwargs):
             if 'state' in flask.request.args:
                 # returning redirect from provider
-                assert flask.request.args['state'] == flask.session.pop('end_session_state')
+                if flask.request.args['state'] != flask.session.pop('end_session_state'):
+                    logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
                 return view_func(*args, **kwargs)
 
             redirect_to_provider = self._logout()
