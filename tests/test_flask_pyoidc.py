@@ -2,6 +2,7 @@ import time
 
 import flask
 import json
+import logging
 import pytest
 import responses
 from datetime import datetime
@@ -264,6 +265,21 @@ class TestOIDCAuthentication(object):
             assert 'end_session_state' not in flask.session
 
         self.assert_view_mock(logout_view_mock, result)
+
+    def test_logout_handles_redirect_back_from_provider_with_incorrect_state(self, caplog):
+        authn = self.get_authn_instance()
+        logout_view_mock = self.get_view_mock()
+        state = 'some_state'
+        with self.app.test_request_context('/logout?state={}'.format(state)):
+            flask.session['end_session_state'] = 'other_state'
+            result = authn.oidc_logout(logout_view_mock)()
+            assert 'end_session_state' not in flask.session
+
+        self.assert_view_mock(logout_view_mock, result)
+        assert caplog.record_tuples[-1] == ('flask_pyoidc.flask_pyoidc',
+                                            logging.ERROR,
+                                            "Got unexpected state '{}' after logout redirect.".format(state))
+
 
     def test_authentication_error_response_calls_to_error_view_if_set(self):
         state = 'test_tate'
