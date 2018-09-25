@@ -14,6 +14,7 @@ from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.user_session import UserSession
+from .util import signed_id_token
 
 
 class TestOIDCAuthentication(object):
@@ -148,16 +149,22 @@ class TestOIDCAuthentication(object):
         user_id = 'user1'
         exp_time = 10
         nonce = 'test_nonce'
-        id_token = IdToken(iss=self.PROVIDER_BASEURL,
-                           aud=self.CLIENT_ID,
-                           sub=user_id,
-                           exp=int(timestamp) + exp_time,
-                           iat=int(timestamp),
-                           nonce=nonce)
+        id_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'aud': [self.CLIENT_ID],
+            'sub': user_id,
+            'exp': int(timestamp) + exp_time,
+            'iat': int(timestamp),
+            'nonce': nonce
+        }
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
         access_token = 'test_access_token'
-        token_response = {'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token.to_jwt()}
+        token_response = {'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt}
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         responses.add(responses.POST, token_endpoint, json=token_response)
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/jwks',
+                      json={'keys': [id_token_signing_key.serialize()]})
 
         # mock userinfo response
         userinfo = {'sub': user_id, 'name': 'Test User'}
@@ -175,8 +182,8 @@ class TestOIDCAuthentication(object):
             authn._handle_authentication_response()
             session = UserSession(flask.session)
             assert session.access_token == access_token
-            assert session.id_token == id_token.to_dict()
-            assert IdToken().from_jwt(session.id_token_jwt) == id_token
+            assert session.id_token == id_token_claims
+            assert session.id_token_jwt == id_token_jwt
             assert session.userinfo == userinfo
 
     @patch('time.time')
