@@ -1,15 +1,15 @@
 import time
 
 import base64
-import json
 import pytest
 import responses
-from oic.oic import AuthorizationResponse, AccessTokenResponse, IdToken, TokenErrorResponse, OpenIDSchema
+from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema
 from six.moves.urllib.parse import parse_qsl, urlparse
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.pyoidc_facade import PyoidcFacade, _ClientAuthentication
+from .util import signed_id_token
 
 
 class TestPyoidcFacade(object):
@@ -92,15 +92,19 @@ class TestPyoidcFacade(object):
     @responses.activate
     def test_token_request(self):
         token_endpoint = self.PROVIDER_BASEURL + '/token'
-        id_token = IdToken(iss=self.PROVIDER_METADATA['issuer'],
-                           sub='test_user',
-                           aud=self.CLIENT_METADATA['client_id'],
-                           exp=time.time() + 1,
-                           iat=time.time(),
-                           nonce='test_nonce')
+        now = int(time.time())
+        id_token_claims = {
+            'iss': self.PROVIDER_METADATA['issuer'],
+            'sub': 'test_user',
+            'aud': [self.CLIENT_METADATA['client_id']],
+            'exp': now + 1,
+            'iat': now,
+            'nonce': 'test_nonce'
+        }
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
         token_response = AccessTokenResponse(access_token='test_access_token',
                                              token_type='Bearer',
-                                             id_token=id_token.to_jwt())
+                                             id_token=id_token_jwt)
         responses.add(responses.POST, token_endpoint, json=token_response.to_dict())
 
         provider_metadata = self.PROVIDER_METADATA.copy(token_endpoint=token_endpoint)
@@ -109,10 +113,14 @@ class TestPyoidcFacade(object):
                               self.REDIRECT_URI)
 
         auth_code = 'auth_code-1234'
+        responses.add(responses.GET,
+                      self.PROVIDER_METADATA['jwks_uri'],
+                      json={'keys': [id_token_signing_key.serialize()]})
         token_response = facade.token_request(auth_code)
 
         expected_token_response = token_response.to_dict()
-        expected_token_response['id_token'] = id_token.to_dict()
+        expected_token_response['id_token'] = id_token_claims
+        expected_token_response['id_token_jwt'] = id_token_jwt
         assert token_response.to_dict() == expected_token_response
 
         token_request = dict(parse_qsl(responses.calls[0].request.body))

@@ -1,4 +1,5 @@
 import base64
+import json
 
 import logging
 from oic.oic import Client, ProviderConfigurationResponse, RegistrationResponse, AuthorizationResponse, \
@@ -126,14 +127,16 @@ class PyoidcFacade(object):
                   data=request,
                   headers=auth_header) \
             .json()
+        logger.debug('received token response: %s', json.dumps(resp))
 
         if 'error' in resp:
             token_resp = TokenErrorResponse(**resp)
         else:
             token_resp = AccessTokenResponse(**resp)
             token_resp.verify(keyjar=self._client.keyjar)
+            if 'id_token' in resp:
+                token_resp['id_token_jwt'] = resp['id_token']
 
-        logger.debug('received token response: %s', token_resp.to_json())
         return token_resp
 
     def userinfo_request(self, access_token):
