@@ -42,10 +42,9 @@ class UserSession(object):
         last = self._session_storage.get('last_authenticated', 0)
         return last + refresh_interval_seconds
 
-    def update(self, last_authenticated, access_token=None, id_token=None, id_token_jwt=None, userinfo=None):
+    def update(self, access_token=None, id_token=None, id_token_jwt=None, userinfo=None):
         """
         Args:
-            last_authenticated (float)
             access_token (str)
             id_token (Mapping[str, str])
             id_token_jwt (str)
@@ -56,7 +55,11 @@ class UserSession(object):
             if value:
                 self._session_storage[session_key] = value
 
-        self._session_storage['last_authenticated'] = last_authenticated
+        auth_time = int(time.time())
+        if id_token:
+            auth_time = id_token.get('auth_time', auth_time)
+
+        self._session_storage['last_authenticated'] = auth_time
         set_if_defined('access_token', access_token)
         set_if_defined('id_token', id_token)
         set_if_defined('id_token_jwt', id_token_jwt)
@@ -85,3 +88,7 @@ class UserSession(object):
     @property
     def current_provider(self):
         return self._session_storage['current_provider']
+
+    @property
+    def last_authenticated(self):
+        return self._session_storage['last_authenticated']

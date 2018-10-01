@@ -82,7 +82,7 @@ class TestOIDCAuthentication(object):
         authn = self.get_authn_instance()
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
-            UserSession(flask.session, self.PROVIDER_NAME).update(time.time())
+            UserSession(flask.session, self.PROVIDER_NAME).update()
             result = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
         self.assert_view_mock(view_mock, result)
 
@@ -90,7 +90,10 @@ class TestOIDCAuthentication(object):
         authn = self.get_authn_instance(session_refresh_interval_seconds=1)
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
-            UserSession(flask.session, self.PROVIDER_NAME).update(time.time() - 1)  # authenticated in the past
+            now = time.time()
+            with patch('time.time') as time_mock:
+                time_mock.return_value = now - 1 # authenticated in the past
+                UserSession(flask.session, self.PROVIDER_NAME).update()
             auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
 
         self.assert_auth_redirect(auth_redirect)
@@ -101,7 +104,7 @@ class TestOIDCAuthentication(object):
         authn = self.get_authn_instance(session_refresh_interval_seconds=999)
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
-            UserSession(flask.session, self.PROVIDER_NAME).update(time.time())  # freshly authenticated
+            UserSession(flask.session, self.PROVIDER_NAME).update()  # freshly authenticated
             result = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
         self.assert_view_mock(view_mock, result)
 
@@ -228,8 +231,7 @@ class TestOIDCAuthentication(object):
         self.app.add_url_rule('/logout', view_func=authn.oidc_logout(logout_view_mock))
 
         with self.app.test_request_context('/logout'):
-            UserSession(flask.session, self.PROVIDER_NAME).update(time.time(),
-                                                                  'test_access_token',
+            UserSession(flask.session, self.PROVIDER_NAME).update('test_access_token',
                                                                   id_token.to_dict(),
                                                                   id_token.to_jwt(),
                                                                   {'sub': 'user1'})
@@ -251,8 +253,7 @@ class TestOIDCAuthentication(object):
         id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
         logout_view_mock = self.get_view_mock()
         with self.app.test_request_context('/logout'):
-            UserSession(flask.session, self.PROVIDER_NAME).update(time.time(),
-                                                                  'test_access_token',
+            UserSession(flask.session, self.PROVIDER_NAME).update('test_access_token',
                                                                   id_token.to_dict(),
                                                                   id_token.to_jwt(),
                                                                   {'sub': 'user1'})

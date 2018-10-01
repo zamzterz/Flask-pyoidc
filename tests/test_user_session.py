@@ -1,6 +1,7 @@
 import time
 
 import pytest
+from mock import patch
 
 from flask_pyoidc.user_session import UserSession, UninitialisedSession
 
@@ -14,7 +15,7 @@ class TestUserSession(object):
     def test_initialising_session_with_existing_user_session_should_preserve_state(self):
         storage = {}
         session1 = UserSession(storage, self.PROVIDER_NAME)
-        session1.update(time.time())
+        session1.update()
         assert session1.is_authenticated() is True
         assert session1.current_provider == self.PROVIDER_NAME
 
@@ -29,7 +30,7 @@ class TestUserSession(object):
     def test_initialising_session_with_new_provider_name_should_reset_session(self):
         storage = {}
         session1 = UserSession(storage, 'provider1')
-        session1.update(time.time())
+        session1.update()
         assert session1.is_authenticated() is True
         session2 = UserSession(storage, 'provider2')
         assert session2.is_authenticated() is False
@@ -63,26 +64,34 @@ class TestUserSession(object):
         {'id_token_jwt': 'eyJh.eyJz.SflK'},
         {'userinfo': {'sub': 'user1', 'name': 'Test User'}},
     ])
-    def test_update(self, data):
+    @patch('time.time')
+    def test_update(self, time_mock, data):
         storage = {}
         auth_time = 1234
+        time_mock.return_value = auth_time
 
-        self.initialised_session(storage).update(auth_time, **data)
+        self.initialised_session(storage).update(**data)
 
         expected_session_data = {'last_authenticated': auth_time, 'current_provider': self.PROVIDER_NAME}
         expected_session_data.update(**data)
         assert storage == expected_session_data
 
+    def test_update_should_use_auth_time_from_id_token_if_it_exists(self):
+        auth_time = 1234
+        session = self.initialised_session({})
+        session.update(id_token={'auth_time': auth_time})
+        assert session.last_authenticated == auth_time
+
     def test_trying_to_update_uninitialised_session_should_throw_exception(self):
         with pytest.raises(UninitialisedSession):
-            UserSession(session_storage={}).update(time.time())
+            UserSession(session_storage={}).update()
 
     def test_clear(self):
         expected_data = {'initial data': 'should remain'}
         session_storage = expected_data.copy()
 
         session = self.initialised_session(session_storage)
-        session.update(time.time(), 'access_token', {'sub': 'user1'}, 'eyJh.eyJz.SflK', {'sub': 'user1}'})
+        session.update('access_token', {'sub': 'user1'}, 'eyJh.eyJz.SflK', {'sub': 'user1}'})
         session.clear()
 
         assert session_storage == expected_data
