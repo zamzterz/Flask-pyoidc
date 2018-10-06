@@ -1,3 +1,5 @@
+import datetime
+
 import flask
 import logging
 from flask import Flask, jsonify
@@ -10,6 +12,7 @@ app = Flask(__name__)
 # See http://flask.pocoo.org/docs/0.12/config/
 app.config.update({'SERVER_NAME': 'localhost:5000',
                    'SECRET_KEY': 'dev_key',  # make sure to change this!!
+                   'PERMANENT_SESSION_LIFETIME': datetime.timedelta(days=7).total_seconds(),
                    'PREFERRED_URL_SCHEME': 'http',
                    'DEBUG': True})
 
