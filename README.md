@@ -79,8 +79,10 @@ The application using this extension **MUST** set the following
 
 You may also configure the way the user sessions created by this extension are handled:
 
-* `OIDC_SESSION_PERMANENT`: If set to `True` (which is the default) the user session will live until the ID Token
-  expiration time. If set to `False` the session will be deleted when the user closes the browser.
+* `OIDC_SESSION_PERMANENT`: If set to `True` (which is the default) the user session will be kept until the configured
+  session lifetime (see below). If set to `False` the session will be deleted when the user closes the browser.
+* `PERMANENT_SESSION_LIFETIME`: Control how long a user session is valid, see
+  [Flask documentation](http://flask.pocoo.org/docs/1.0/config/#PERMANENT_SESSION_LIFETIME) for more information.
 
 ### Session refresh
 

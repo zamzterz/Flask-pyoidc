@@ -127,10 +127,6 @@ class OIDCAuthentication(object):
                 raise ValueError('The \'nonce\' parameter does not match.')
 
             id_token_claims = id_token.to_dict()
-            # set the session as requested by the OP if we have no default
-            if current_app.config.get('OIDC_SESSION_PERMANENT', True):
-                flask.session.permanent = True
-                flask.session.permanent_session_lifetime = id_token['exp'] - time.time()
 
         # do userinfo request
         userinfo = client.userinfo_request(access_token)
@@ -140,6 +136,9 @@ class OIDCAuthentication(object):
 
         if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
+
+        if current_app.config.get('OIDC_SESSION_PERMANENT', True):
+            flask.session.permanent = True
 
         UserSession(flask.session).update(access_token,
                                           id_token_claims,
