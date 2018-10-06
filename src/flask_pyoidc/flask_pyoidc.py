@@ -141,8 +141,7 @@ class OIDCAuthentication(object):
         if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
             raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
-        UserSession(flask.session).update(time.time(),
-                                          access_token,
+        UserSession(flask.session).update(access_token,
                                           id_token_claims,
                                           token_resp.get('id_token_jwt'),
                                           userinfo_claims)
