@@ -44,6 +44,14 @@ config = ProviderConfiguration(provider_metadata=provider_metadata, [client conf
 See the OpenID Connect specification for more information about the
 [provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
 
+#### Customizing authentication request parameters
+To customize the [authentication request parameters](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest),
+use `auth_request_params` in `ProviderConfiguration`:
+```python
+auth_params = {'scope': ['openid', 'profile']} # specify the scope to request
+config = ProviderConfiguration([provider/client config], auth_request_params=auth_params)
+```
+
 #### Static client registration
 
 If you have already registered a client with the provider, specify the client credentials directly:
