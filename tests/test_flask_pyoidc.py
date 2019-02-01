@@ -7,7 +7,9 @@ import pytest
 import responses
 from datetime import datetime
 from flask import Flask
+from jwkest import jws
 from mock import MagicMock, patch
+from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
 from six.moves.http_cookies import SimpleCookie
 from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
@@ -180,6 +182,55 @@ class TestOIDCAuthentication(object):
                                                         'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
         with self.app.test_request_context('/redirect_uri?state={}&code=test'.format(state)):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/'
+            flask.session['state'] = state
+            flask.session['nonce'] = nonce
+            authn._handle_authentication_response()
+            session = UserSession(flask.session)
+            assert session.access_token == access_token
+            assert session.id_token == id_token_claims
+            assert session.id_token_jwt == id_token_jwt
+            assert session.userinfo == userinfo
+
+    @patch('time.time')
+    @patch('oic.utils.time_util.utc_time_sans_frac')  # used internally by pyoidc when verifying ID Token
+    @responses.activate
+    def test_handle_implicit_authentication_response(self, time_mock, utc_time_sans_frac_mock):
+        # freeze time since ID Token validation includes expiration timestamps
+        timestamp = time.mktime(datetime(2017, 1, 1).timetuple())
+        time_mock.return_value = timestamp
+        utc_time_sans_frac_mock.return_value = int(timestamp)
+
+        # mock auth response
+        access_token = 'test_access_token'
+        user_id = 'user1'
+        exp_time = 10
+        nonce = 'test_nonce'
+        id_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'aud': [self.CLIENT_ID],
+            'sub': user_id,
+            'exp': int(timestamp) + exp_time,
+            'iat': int(timestamp),
+            'nonce': nonce,
+            'at_hash': jws.left_hash(access_token)
+        }
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
+
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/jwks',
+                      json={'keys': [id_token_signing_key.serialize()]})
+
+        # mock userinfo response
+        userinfo = {'sub': user_id, 'name': 'Test User'}
+        userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
+        responses.add(responses.GET, userinfo_endpoint, json=userinfo)
+
+        authn = self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
+        state = 'test_state'
+        auth_response = AuthorizationResponse(**{'state': state, 'access_token': access_token, 'id_token': id_token_jwt})
+        with self.app.test_request_context('/redirect_uri?{}'.format(auth_response.to_urlencoded())):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['destination'] = '/'
             flask.session['state'] = state

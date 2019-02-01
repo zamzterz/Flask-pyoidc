@@ -65,6 +65,17 @@ class TestAuthResponseHandler:
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
 
+    def test_should_handle_auth_response_without_authorization_code(self, client_mock):
+        auth_response = AuthorizationResponse(**self.TOKEN_RESPONSE)
+        auth_response['state'] = 'test_state'
+        client_mock.userinfo_request.return_value = self.USERINFO_RESPONSE
+        result = AuthResponseHandler(client_mock).process_auth_response(auth_response, 'test_state')
+        assert not client_mock.token_request.called
+        assert result.access_token == 'test_token'
+        assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
+        assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
+        assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
+
     def test_should_handle_token_response_without_id_token(self, client_mock):
         token_response = {'access_token': 'test_token'}
         client_mock.token_request.return_value = AccessTokenResponse(**token_response)

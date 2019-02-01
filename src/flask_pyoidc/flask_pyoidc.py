@@ -100,9 +100,7 @@ class OIDCAuthentication(object):
     def _handle_authentication_response(self):
         client = self.clients[UserSession(flask.session).current_provider]
 
-        # parse authentication response
-        query_string = flask.request.query_string.decode('utf-8')
-        authn_resp = client.parse_authentication_response(query_string)
+        authn_resp = client.parse_authentication_response(flask.request.args)
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
         try:
