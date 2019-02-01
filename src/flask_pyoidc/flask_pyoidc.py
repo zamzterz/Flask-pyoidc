@@ -14,10 +14,9 @@
    limitations under the License.
 """
 
-import time
-
 import flask
 import functools
+import json
 import logging
 from flask import current_app
 from flask.helpers import url_for
@@ -25,6 +24,7 @@ from oic import rndstr
 from oic.oic.message import EndSessionRequest
 from werkzeug.utils import redirect
 
+from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
 from .pyoidc_facade import PyoidcFacade
 from .user_session import UserSession
 
@@ -105,50 +105,28 @@ class OIDCAuthentication(object):
         authn_resp = client.parse_authentication_response(query_string)
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
-        if authn_resp['state'] != flask.session.pop('state'):
-            raise ValueError('The \'state\' parameter does not match.')
-
-        if 'error' in authn_resp:
-            return self._handle_error_response(authn_resp)
-
-        token_resp = client.token_request(authn_resp['code'])
-
-        if 'error' in token_resp:
-            return self._handle_error_response(token_resp)
-
-        access_token = token_resp['access_token']
-
-        id_token_claims = None
-        if 'id_token' in token_resp:
-            id_token = token_resp['id_token']
-            logger.debug('received id token: %s', id_token.to_json())
-
-            if id_token['nonce'] != flask.session.pop('nonce'):
-                raise ValueError('The \'nonce\' parameter does not match.')
-
-            id_token_claims = id_token.to_dict()
-
-        # do userinfo request
-        userinfo = client.userinfo_request(access_token)
-        userinfo_claims = None
-        if userinfo:
-            userinfo_claims = userinfo.to_dict()
-
-        if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
-            raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
+        try:
+            result = AuthResponseHandler(client).process_auth_response(authn_resp,
+                                                                       flask.session.pop('state'),
+                                                                       flask.session.pop('nonce'))
+        except AuthResponseErrorResponseError as e:
+            return self._handle_error_response(e.error_response)
+        except AuthResponseProcessError as e:
+            return self._handle_error_response({'error': 'unexpected_error', 'error_description': str(e)})
 
         if current_app.config.get('OIDC_SESSION_PERMANENT', True):
             flask.session.permanent = True
 
-        UserSession(flask.session).update(access_token,
-                                          id_token_claims,
-                                          token_resp.get('id_token_jwt'),
-                                          userinfo_claims)
+        UserSession(flask.session).update(result.access_token,
+                                          result.id_token_claims,
+                                          result.id_token_jwt,
+                                          result.userinfo_claims)
 
         destination = flask.session.pop('destination')
         return redirect(destination)
 
     def _handle_error_response(self, error_response):
+        logger.error(json.dumps(error_response))
         if self._error_view:
             error = {k: error_response[k] for k in ['error', 'error_description'] if k in error_response}
             return self._error_view(**error)

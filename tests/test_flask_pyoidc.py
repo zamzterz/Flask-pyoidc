@@ -308,6 +308,7 @@ class TestOIDCAuthentication(object):
                                                                                         state=state)):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             result = authn._handle_authentication_response()
 
         self.assert_view_mock(error_view_mock, result)
@@ -321,6 +322,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?{}'.format(urlencode(error_response))):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             response = authn._handle_authentication_response()
         assert response == "Something went wrong with the authentication, please try to login again."
 
@@ -337,6 +339,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?code=foo&state={}'.format(state)):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             result = authn._handle_authentication_response()
 
         self.assert_view_mock(error_view_mock, result)
@@ -353,6 +356,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             response = authn._handle_authentication_response()
         assert response == "Something went wrong with the authentication, please try to login again."
 

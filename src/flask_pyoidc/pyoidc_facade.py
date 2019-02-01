@@ -95,6 +95,10 @@ class PyoidcFacade(object):
         return auth_request.request(self._client.authorization_endpoint)
 
     def parse_authentication_response(self, query_string):
+        """
+        Returns:
+            Union[AuthorizationResponse, AuthorizationErrorResponse]: The parsed authorization response
+        """
         return self._client.parse_response(AuthorizationResponse, info=query_string, sformat='urlencoded')
 
     def token_request(self, authorization_code):
