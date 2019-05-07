@@ -62,7 +62,7 @@ class OIDCAuthentication(object):
         with app.app_context():
             url_scheme = 'https' if current_app.config.get('REDIRECT_URI_FORCE_HTTPS', False) else 'http'
             self.clients = {
-                name: PyoidcFacade(configuration, url_for(self.REDIRECT_URI_ENDPOINT, _scheme=url_scheme))
+                name: PyoidcFacade(configuration, url_for(self.REDIRECT_URI_ENDPOINT, _external=True, _scheme=url_scheme))
                 for (name, configuration) in self._provider_configurations.items()
             }
 
