@@ -84,3 +84,26 @@ class TestAuthResponseHandler:
                                                                         self.TOKEN_RESPONSE['id_token']['nonce'])
         assert result.access_token == 'test_token'
         assert result.id_token_claims is None
+
+    @pytest.mark.parametrize('response_type, expected', [
+        ('code', False),  # Authorization Code Flow
+        ('id_token', True),  # Implicit Flow
+        ('id_token token', True),  # Implicit Flow
+        ('code id_token', True),  # Hybrid Flow
+        ('code token', True),  # Hybrid Flow
+        ('code id_token token', True)  # Hybrid Flow
+    ])
+    def test_expect_fragment_encoded_response_by_response_type(self, response_type, expected):
+        assert AuthResponseHandler.expect_fragment_encoded_response({'response_type': response_type}) is expected
+
+    @pytest.mark.parametrize('response_type, response_mode, expected', [
+        ('code', 'fragment', True),
+        ('id_token', 'query', False),
+        ('code token', 'form_post', False),
+    ])
+    def test_expect_fragment_encoded_response_with_non_default_response_mode(self,
+                                                                             response_type,
+                                                                             response_mode,
+                                                                             expected):
+        auth_req = {'response_type': response_type, 'response_mode': response_mode}
+        assert AuthResponseHandler.expect_fragment_encoded_response(auth_req) is expected

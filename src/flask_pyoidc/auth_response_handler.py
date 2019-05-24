@@ -88,3 +88,17 @@ class AuthResponseHandler:
             raise AuthResponseMismatchingSubjectError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
         return AuthenticationResult(access_token, id_token_claims, id_token_jwt, userinfo_claims)
+
+    @classmethod
+    def expect_fragment_encoded_response(cls, auth_request):
+        if 'response_mode' in auth_request:
+            return auth_request['response_mode'] == 'fragment'
+
+        response_type = set(auth_request['response_type'].split(' '))
+        is_implicit_flow = response_type == {'id_token'} or \
+                           response_type == {'id_token', 'token'}
+        is_hybrid_flow = response_type == {'code', 'id_token'} or \
+                         response_type == {'code', 'token'} or \
+                         response_type == {'code', 'id_token', 'token'}
+
+        return is_implicit_flow or is_hybrid_flow

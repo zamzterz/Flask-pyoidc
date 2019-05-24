@@ -1,0 +1,17 @@
+<html>
+<script>
+    var req = new XMLHttpRequest();
+    // using POST so query isn't logged
+    req.open('POST', '/redirect_uri', true);
+    req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+    req.onreadystatechange = function () {
+        if (req.readyState === this.DONE) {
+            var location = req.responseText;
+            console.log(location);
+            window.location = location;
+        }
+    };
+    req.send(location.hash.substring(1));
+</script>
+</html>
