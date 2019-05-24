@@ -3,7 +3,8 @@ import time
 import base64
 import pytest
 import responses
-from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema
+from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema, \
+    AuthorizationErrorResponse
 from six.moves.urllib.parse import parse_qsl, urlparse
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
@@ -84,10 +85,42 @@ class TestPyoidcFacade(object):
                               self.REDIRECT_URI)
         auth_code = 'auth_code-1234'
         state = 'state-1234'
-        parsed_auth_response = facade.parse_authentication_response('code={}&state={}'.format(auth_code, state))
+        auth_response = AuthorizationResponse(**{'state': state, 'code': auth_code})
+        parsed_auth_response = facade.parse_authentication_response(auth_response.to_dict())
         assert isinstance(parsed_auth_response, AuthorizationResponse)
-        assert parsed_auth_response['code'] == auth_code
+        assert parsed_auth_response.to_dict() == auth_response.to_dict()
+
+    def test_parse_authentication_response_handles_error_response(self):
+        facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
+                                                    client_metadata=self.CLIENT_METADATA),
+                              self.REDIRECT_URI)
+        error_response = AuthorizationErrorResponse(**{'error': 'invalid_request', 'state': 'state-1234'})
+        parsed_auth_response = facade.parse_authentication_response(error_response)
+        assert isinstance(parsed_auth_response, AuthorizationErrorResponse)
+        assert parsed_auth_response.to_dict() == error_response.to_dict()
+
+    @responses.activate
+    def test_parse_authentication_response_preserves_id_token_jwt(self):
+        facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
+                                                    client_metadata=self.CLIENT_METADATA),
+                              self.REDIRECT_URI)
+        state = 'state-1234'
+        now = int(time.time())
+        id_token, id_token_signing_key = signed_id_token({
+            'iss': self.PROVIDER_METADATA['issuer'],
+            'sub': 'test_sub',
+            'aud': 'client1',
+            'exp': now + 1,
+            'iat': now
+        })
+        responses.add(responses.GET,
+                      self.PROVIDER_METADATA['jwks_uri'],
+                      json={'keys': [id_token_signing_key.serialize()]})
+        auth_response = AuthorizationResponse(**{'state': state, 'id_token': id_token})
+        parsed_auth_response = facade.parse_authentication_response(auth_response)
+        assert isinstance(parsed_auth_response, AuthorizationResponse)
         assert parsed_auth_response['state'] == state
+        assert parsed_auth_response['id_token_jwt'] == id_token
 
     @responses.activate
     def test_token_request(self):
@@ -118,6 +151,7 @@ class TestPyoidcFacade(object):
                       json={'keys': [id_token_signing_key.serialize()]})
         token_response = facade.token_request(auth_code)
 
+        assert isinstance(token_response, AccessTokenResponse)
         expected_token_response = token_response.to_dict()
         expected_token_response['id_token'] = id_token_claims
         expected_token_response['id_token_jwt'] = id_token_jwt
@@ -179,6 +213,13 @@ class TestPyoidcFacade(object):
                                                     client_metadata=self.CLIENT_METADATA),
                               self.REDIRECT_URI)
         assert facade.userinfo_request('test_token') is None
+
+    def test_no_userinfo_request_is_made_if_no_access_token(self):
+        provider_metadata = self.PROVIDER_METADATA.copy(userinfo_endpoint=self.PROVIDER_BASEURL + '/userinfo')
+        facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
+                                                    client_metadata=self.CLIENT_METADATA),
+                              self.REDIRECT_URI)
+        assert facade.userinfo_request(None) is None
 
 
 class TestClientAuthentication(object):

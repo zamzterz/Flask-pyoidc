@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
         name='Flask-pyoidc',
         version='2.0.0',
-        packages=find_packages('src'),
+        packages=['flask_pyoidc'],
         package_dir={'': 'src'},
         url='https://github.com/zamzterz/flask-pyoidc',
         license='Apache 2.0',
@@ -14,5 +14,6 @@ setup(
             'oic==0.12',
             'Flask',
             'requests'
-        ]
+        ],
+        package_data={'flask_pyoidc': ['files/parse_fragment.html']},
 )

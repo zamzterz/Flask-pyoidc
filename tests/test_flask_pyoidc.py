@@ -7,7 +7,9 @@ import pytest
 import responses
 from datetime import datetime
 from flask import Flask
+from jwkest import jws
 from mock import MagicMock, patch
+from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
 from six.moves.http_cookies import SimpleCookie
 from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
@@ -93,7 +95,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/'):
             now = time.time()
             with patch('time.time') as time_mock:
-                time_mock.return_value = now - 1 # authenticated in the past
+                time_mock.return_value = now - 1  # authenticated in the past
                 UserSession(flask.session, self.PROVIDER_NAME).update()
             auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
 
@@ -108,6 +110,18 @@ class TestOIDCAuthentication(object):
             UserSession(flask.session, self.PROVIDER_NAME).update()  # freshly authenticated
             result = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
         self.assert_view_mock(view_mock, result)
+
+    @pytest.mark.parametrize('response_type,expected', [
+        ('code', False),
+        ('id_token token', True)
+    ])
+    def test_expected_auth_response_mode_is_set(self, response_type, expected):
+        authn = self.init_app(auth_request_params={'response_type': response_type})
+        view_mock = self.get_view_mock()
+        with self.app.test_request_context('/'):
+            auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
+            assert flask.session['fragment_encoded_response'] is expected
+        self.assert_auth_redirect(auth_redirect)
 
     @responses.activate
     def test_should_register_client_if_not_registered_before(self):
@@ -190,6 +204,96 @@ class TestOIDCAuthentication(object):
             assert session.id_token == id_token_claims
             assert session.id_token_jwt == id_token_jwt
             assert session.userinfo == userinfo
+
+    @patch('time.time')
+    @patch('oic.utils.time_util.utc_time_sans_frac')  # used internally by pyoidc when verifying ID Token
+    @responses.activate
+    def test_handle_implicit_authentication_response(self, time_mock, utc_time_sans_frac_mock):
+        # freeze time since ID Token validation includes expiration timestamps
+        timestamp = time.mktime(datetime(2017, 1, 1).timetuple())
+        time_mock.return_value = timestamp
+        utc_time_sans_frac_mock.return_value = int(timestamp)
+
+        # mock auth response
+        access_token = 'test_access_token'
+        user_id = 'user1'
+        exp_time = 10
+        nonce = 'test_nonce'
+        id_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'aud': [self.CLIENT_ID],
+            'sub': user_id,
+            'exp': int(timestamp) + exp_time,
+            'iat': int(timestamp),
+            'nonce': nonce,
+            'at_hash': jws.left_hash(access_token)
+        }
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
+
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/jwks',
+                      json={'keys': [id_token_signing_key.serialize()]})
+
+        # mock userinfo response
+        userinfo = {'sub': user_id, 'name': 'Test User'}
+        userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
+        responses.add(responses.GET, userinfo_endpoint, json=userinfo)
+
+        authn = self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
+        state = 'test_state'
+        auth_response = AuthorizationResponse(
+            **{'state': state, 'access_token': access_token, 'id_token': id_token_jwt})
+        with self.app.test_request_context('/redirect_uri?{}'.format(auth_response.to_urlencoded())):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/'
+            flask.session['state'] = state
+            flask.session['nonce'] = nonce
+            authn._handle_authentication_response()
+            session = UserSession(flask.session)
+            assert session.access_token == access_token
+            assert session.id_token == id_token_claims
+            assert session.id_token_jwt == id_token_jwt
+            assert session.userinfo == userinfo
+
+    def test_handle_authentication_response_POST(self):
+        access_token = 'test_access_token'
+        state = 'test_state'
+
+        authn = self.init_app()
+        auth_response = AuthorizationResponse(**{'state': state, 'access_token': access_token})
+
+        with self.app.test_request_context('/redirect_uri',
+                                           method='POST',
+                                           data=auth_response.to_dict(),
+                                           mimetype='application/x-www-form-urlencoded'):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/test'
+            flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
+            response = authn._handle_authentication_response()
+            session = UserSession(flask.session)
+            assert session.access_token == access_token
+            assert response == '/test'
+
+    def test_handle_authentication_response_fragment_encoded(self):
+        authn = self.init_app()
+        with self.app.test_request_context('/redirect_uri'):
+            flask.session['fragment_encoded_response'] = True
+            response = authn._handle_authentication_response()
+        assert response.startswith('<html>')
+
+    def test_handle_authentication_response_error_message(self):
+        authn = self.init_app()
+        with self.app.test_request_context('/redirect_uri?error=1'):
+            flask.session['error'] = {'error': 'test'}
+            response = authn._handle_authentication_response()
+        assert response == 'Something went wrong with the authentication, please try to login again.'
+
+    def test_handle_authentication_response_error_message_without_stored_error(self):
+        authn = self.init_app()
+        with self.app.test_request_context('/redirect_uri?error=1'):
+            response = authn._handle_authentication_response()
+        assert response == 'Something went wrong.'
 
     @patch('time.time')
     @patch('oic.utils.time_util.utc_time_sans_frac')  # used internally by pyoidc when verifying ID Token
@@ -308,6 +412,7 @@ class TestOIDCAuthentication(object):
                                                                                         state=state)):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             result = authn._handle_authentication_response()
 
         self.assert_view_mock(error_view_mock, result)
@@ -321,6 +426,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?{}'.format(urlencode(error_response))):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             response = authn._handle_authentication_response()
         assert response == "Something went wrong with the authentication, please try to login again."
 
@@ -337,6 +443,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?code=foo&state={}'.format(state)):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             result = authn._handle_authentication_response()
 
         self.assert_view_mock(error_view_mock, result)
@@ -353,6 +460,7 @@ class TestOIDCAuthentication(object):
         with self.app.test_request_context('/redirect_uri?code=foo&state=' + state):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
             response = authn._handle_authentication_response()
         assert response == "Something went wrong with the authentication, please try to login again."
 

@@ -14,22 +14,27 @@
    limitations under the License.
 """
 
-import time
-
 import flask
 import functools
+import json
 import logging
+import pkg_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic.message import EndSessionRequest
 from werkzeug.utils import redirect
 
+from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
 from .pyoidc_facade import PyoidcFacade
 from .user_session import UserSession
 
 logger = logging.getLogger(__name__)
 
+try:
+    from urllib.parse import parse_qsl
+except ImportError:
+    from urlparse import parse_qsl
 
 class OIDCAuthentication(object):
     """
@@ -56,7 +61,10 @@ class OIDCAuthentication(object):
 
     def init_app(self, app):
         # setup redirect_uri as a flask route
-        app.add_url_rule('/redirect_uri', self.REDIRECT_URI_ENDPOINT, self._handle_authentication_response)
+        app.add_url_rule('/redirect_uri',
+                         self.REDIRECT_URI_ENDPOINT,
+                         self._handle_authentication_response,
+                         methods=['GET', 'POST'])
 
         # dynamically add the Flask redirect uri to the client info
         with app.app_context():
@@ -95,60 +103,69 @@ class OIDCAuthentication(object):
         login_url = client.authentication_request(flask.session['state'],
                                                   flask.session['nonce'],
                                                   extra_auth_params)
+
+        auth_params = dict(parse_qsl(login_url.split('?')[1]))
+        flask.session['fragment_encoded_response'] = AuthResponseHandler.expect_fragment_encoded_response(auth_params)
         return redirect(login_url)
 
     def _handle_authentication_response(self):
+        has_error = flask.request.args.get('error', False, lambda x: bool(int(x)))
+        if has_error:
+            if 'error' in flask.session:
+                return self._show_error_response(flask.session.pop('error'))
+            return 'Something went wrong.'
+
+        if flask.session.pop('fragment_encoded_response', False):
+            return pkg_resources.resource_string(__name__, 'files/parse_fragment.html').decode('utf-8')
+
+        is_processing_fragment_encoded_response = flask.request.method == 'POST'
+
+        if is_processing_fragment_encoded_response:
+            auth_resp = flask.request.form
+        else:
+            auth_resp = flask.request.args
+
         client = self.clients[UserSession(flask.session).current_provider]
 
-        # parse authentication response
-        query_string = flask.request.query_string.decode('utf-8')
-        authn_resp = client.parse_authentication_response(query_string)
+        authn_resp = client.parse_authentication_response(auth_resp)
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
-        if authn_resp['state'] != flask.session.pop('state'):
-            raise ValueError('The \'state\' parameter does not match.')
-
-        if 'error' in authn_resp:
-            return self._handle_error_response(authn_resp)
-
-        token_resp = client.token_request(authn_resp['code'])
-
-        if 'error' in token_resp:
-            return self._handle_error_response(token_resp)
-
-        access_token = token_resp['access_token']
-
-        id_token_claims = None
-        if 'id_token' in token_resp:
-            id_token = token_resp['id_token']
-            logger.debug('received id token: %s', id_token.to_json())
-
-            if id_token['nonce'] != flask.session.pop('nonce'):
-                raise ValueError('The \'nonce\' parameter does not match.')
-
-            id_token_claims = id_token.to_dict()
-
-        # do userinfo request
-        userinfo = client.userinfo_request(access_token)
-        userinfo_claims = None
-        if userinfo:
-            userinfo_claims = userinfo.to_dict()
-
-        if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
-            raise ValueError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
+        try:
+            result = AuthResponseHandler(client).process_auth_response(authn_resp,
+                                                                       flask.session.pop('state'),
+                                                                       flask.session.pop('nonce'))
+        except AuthResponseErrorResponseError as e:
+            return self._handle_error_response(e.error_response, is_processing_fragment_encoded_response)
+        except AuthResponseProcessError as e:
+            return self._handle_error_response({'error': 'unexpected_error', 'error_description': str(e)},
+                                               is_processing_fragment_encoded_response)
 
         if current_app.config.get('OIDC_SESSION_PERMANENT', True):
             flask.session.permanent = True
 
-        UserSession(flask.session).update(access_token,
-                                          id_token_claims,
-                                          token_resp.get('id_token_jwt'),
-                                          userinfo_claims)
+        UserSession(flask.session).update(result.access_token,
+                                          result.id_token_claims,
+                                          result.id_token_jwt,
+                                          result.userinfo_claims)
 
         destination = flask.session.pop('destination')
+        if is_processing_fragment_encoded_response:
+            # if the POST request was from the JS page handling fragment encoded responses we need to return
+            # the destination URL as the response body
+            return destination
+
         return redirect(destination)
 
-    def _handle_error_response(self, error_response):
+    def _handle_error_response(self, error_response, should_redirect=False):
+        if should_redirect:
+            # if the current request was from the JS page handling fragment encoded responses we need to return
+            # a URL for the error page to redirect to
+            flask.session['error'] = error_response
+            return '/redirect_uri?error=1'
+        return self._show_error_response(error_response)
+
+    def _show_error_response(self, error_response):
+        logger.error(json.dumps(error_response))
         if self._error_view:
             error = {k: error_response[k] for k in ['error', 'error_description'] if k in error_response}
             return self._error_view(**error)

@@ -3,7 +3,7 @@ import json
 
 import logging
 from oic.oic import Client, ProviderConfigurationResponse, RegistrationResponse, AuthorizationResponse, \
-    AccessTokenResponse, TokenErrorResponse
+    AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
 logger = logging.getLogger(__name__)
@@ -94,8 +94,17 @@ class PyoidcFacade(object):
 
         return auth_request.request(self._client.authorization_endpoint)
 
-    def parse_authentication_response(self, query_string):
-        return self._client.parse_response(AuthorizationResponse, info=query_string, sformat='urlencoded')
+    def parse_authentication_response(self, response_params):
+        """
+        Args:
+            response_params (Mapping[str, str]): authentication response parameters
+        Returns:
+            Union[AuthorizationResponse, AuthorizationErrorResponse]: The parsed authorization response
+        """
+        auth_resp = self._parse_response(response_params, AuthorizationResponse, AuthorizationErrorResponse)
+        if 'id_token' in response_params:
+            auth_resp['id_token_jwt'] = response_params['id_token']
+        return auth_resp
 
     def token_request(self, authorization_code):
         """
@@ -129,13 +138,9 @@ class PyoidcFacade(object):
             .json()
         logger.debug('received token response: %s', json.dumps(resp))
 
-        if 'error' in resp:
-            token_resp = TokenErrorResponse(**resp)
-        else:
-            token_resp = AccessTokenResponse(**resp)
-            token_resp.verify(keyjar=self._client.keyjar)
-            if 'id_token' in resp:
-                token_resp['id_token_jwt'] = resp['id_token']
+        token_resp = self._parse_response(resp, AccessTokenResponse, TokenErrorResponse)
+        if 'id_token' in resp:
+            token_resp['id_token_jwt'] = resp['id_token']
 
         return token_resp
 
@@ -148,7 +153,7 @@ class PyoidcFacade(object):
             oic.oic.message.OpenIDSchema: UserInfo Response
         """
         http_method = self._provider_configuration.userinfo_endpoint_method
-        if http_method is None or not self._client.userinfo_endpoint:
+        if not access_token or http_method is None or not self._client.userinfo_endpoint:
             return None
 
         logger.debug('making userinfo request')
@@ -165,3 +170,11 @@ class PyoidcFacade(object):
     def provider_end_session_endpoint(self):
         provider_metadata = self._provider_configuration.ensure_provider_metadata()
         return provider_metadata.get('end_session_endpoint')
+
+    def _parse_response(self, response_params, success_response_cls, error_response_cls):
+        if 'error' in response_params:
+            response = error_response_cls(**response_params)
+        else:
+            response = success_response_cls(**response_params)
+            response.verify(keyjar=self._client.keyjar)
+        return response
