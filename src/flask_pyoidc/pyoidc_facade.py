@@ -171,6 +171,10 @@ class PyoidcFacade(object):
         provider_metadata = self._provider_configuration.ensure_provider_metadata()
         return provider_metadata.get('end_session_endpoint')
 
+    @property
+    def post_logout_redirect_uris(self):
+        return self._client.registration_response.get('post_logout_redirect_uris')
+
     def _parse_response(self, response_params, success_response_cls, error_response_cls):
         if 'error' in response_params:
             response = error_response_cls(**response_params)

@@ -73,17 +73,27 @@ class OIDCAuthentication(object):
                 for (name, configuration) in self._provider_configurations.items()
             }
 
-    def _get_post_logout_redirect_uri(self):
-        if self._logout_view:
-            return url_for(self._logout_view.__name__, _external=True)
-        return None
+    def _get_post_logout_redirect_uri(self, client):
+        if client.post_logout_redirect_uris:
+            return client.post_logout_redirect_uris[0]
+        return self._get_url_for_logout_view()
+
+    def _get_url_for_logout_view(self):
+        return url_for(self._logout_view.__name__, _external=True) if self._logout_view else None
 
     def _register_client(self, client):
+        def default_post_logout_redirect_uris():
+            url_for_logout_view = self._get_url_for_logout_view()
+            if url_for_logout_view:
+                return [url_for_logout_view]
+            return []
+
         client_registration_args = {}
-        post_logout_redirect_uri = self._get_post_logout_redirect_uri()
-        if post_logout_redirect_uri:
-            logger.debug('registering with post_logout_redirect_uri=%s', post_logout_redirect_uri)
-            client_registration_args['post_logout_redirect_uris'] = [post_logout_redirect_uri]
+        post_logout_redirect_uris = client._provider_configuration._client_registration_info.get('post_logout_redirect_uris',
+                                                                                                 default_post_logout_redirect_uris())
+        if post_logout_redirect_uris:
+            logger.debug('registering with post_logout_redirect_uris=%s', post_logout_redirect_uris)
+            client_registration_args['post_logout_redirect_uris'] = post_logout_redirect_uris
         client.register(client_registration_args)
 
     def _authenticate(self, client, interactive=True):
@@ -210,7 +220,7 @@ class OIDCAuthentication(object):
             flask.session['end_session_state'] = rndstr()
 
             end_session_request = EndSessionRequest(id_token_hint=id_token_jwt,
-                                                    post_logout_redirect_uri=self._get_post_logout_redirect_uri(),
+                                                    post_logout_redirect_uri=self._get_post_logout_redirect_uri(client),
                                                     state=flask.session['end_session_state'])
 
             logger.debug('send endsession request: %s', end_session_request.to_json())
