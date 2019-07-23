@@ -71,24 +71,24 @@ class UserSession(object):
 
     @property
     def access_token(self):
-        return self._session_storage['access_token']
+        return self._session_storage.get('access_token')
 
     @property
     def id_token(self):
-        return self._session_storage['id_token']
+        return self._session_storage.get('id_token')
 
     @property
     def id_token_jwt(self):
-        return self._session_storage['id_token_jwt']
+        return self._session_storage.get('id_token_jwt')
 
     @property
     def userinfo(self):
-        return self._session_storage['userinfo']
+        return self._session_storage.get('userinfo')
 
     @property
     def current_provider(self):
-        return self._session_storage['current_provider']
+        return self._session_storage.get('current_provider')
 
     @property
     def last_authenticated(self):
-        return self._session_storage['last_authenticated']
+        return self._session_storage.get('last_authenticated')
