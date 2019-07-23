@@ -85,6 +85,18 @@ class TestAuthResponseHandler:
         assert result.access_token == 'test_token'
         assert result.id_token_claims is None
 
+    def test_should_handle_no_token_response(self, client_mock):
+        client_mock.token_request.return_value = None
+        client_mock.userinfo_request.return_value = None
+        hybrid_auth_response = self.AUTH_RESPONSE.copy()
+        hybrid_auth_response.update(self.TOKEN_RESPONSE)
+        result = AuthResponseHandler(client_mock).process_auth_response(AuthorizationResponse(**hybrid_auth_response),
+                                                                        self.AUTH_RESPONSE['state'],
+                                                                        self.TOKEN_RESPONSE['id_token']['nonce'])
+        assert result.access_token == 'test_token'
+        assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
+        assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
+
     @pytest.mark.parametrize('response_type, expected', [
         ('code', False),  # Authorization Code Flow
         ('id_token', True),  # Implicit Flow

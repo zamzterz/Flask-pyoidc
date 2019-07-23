@@ -62,21 +62,21 @@ class AuthResponseHandler:
 
         if 'code' in auth_response:
             token_resp = self._client.token_request(auth_response['code'])
+            if token_resp:
+                if 'error' in token_resp:
+                    raise AuthResponseErrorResponseError(token_resp.to_dict())
 
-            if 'error' in token_resp:
-                raise AuthResponseErrorResponseError(token_resp.to_dict())
+                access_token = token_resp['access_token']
 
-            access_token = token_resp['access_token']
+                if 'id_token' in token_resp:
+                    id_token = token_resp['id_token']
+                    logger.debug('received id token: %s', id_token.to_json())
 
-            if 'id_token' in token_resp:
-                id_token = token_resp['id_token']
-                logger.debug('received id token: %s', id_token.to_json())
+                    if id_token['nonce'] != expected_nonce:
+                        raise AuthResponseUnexpectedNonceError()
 
-                if id_token['nonce'] != expected_nonce:
-                    raise AuthResponseUnexpectedNonceError()
-
-                id_token_claims = id_token.to_dict()
-                id_token_jwt = token_resp.get('id_token_jwt')
+                    id_token_claims = id_token.to_dict()
+                    id_token_jwt = token_resp.get('id_token_jwt')
 
         # do userinfo request
         userinfo = self._client.userinfo_request(access_token)
