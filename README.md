@@ -6,7 +6,9 @@
 
 This Flask extension provides simple OpenID Connect authentication, backed by [pyoidc](https://github.com/rohe/pyoidc).
 
-*Currently only ["Authorization Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) is supported.*
+["Authorization Code Flow"](http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth), as well as
+["Implicit Flow"](https://openid.net/specs/openid-connect-core-1_0.html#ImplicitFlowAuth) and 
+["Hybrid Flow"](https://openid.net/specs/openid-connect-core-1_0.html#HybridFlowAuth), is supported.
 
 ## Example
 
