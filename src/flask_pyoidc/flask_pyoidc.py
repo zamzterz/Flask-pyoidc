@@ -36,12 +36,11 @@ try:
 except ImportError:
     from urlparse import parse_qsl
 
+
 class OIDCAuthentication(object):
     """
     OIDCAuthentication object for Flask extension.
     """
-
-    REDIRECT_URI_ENDPOINT = 'redirect_uri'
 
     def __init__(self, provider_configurations, app=None):
         """
@@ -55,21 +54,28 @@ class OIDCAuthentication(object):
         self.clients = None
         self._logout_view = None
         self._error_view = None
+        self._redirect_uri_endpoint = 'redirect_uri'
 
         if app:
             self.init_app(app)
 
     def init_app(self, app):
+        if 'OIDC_REDIRECT_ENDPOINT' in app.config:
+            redirect_endpoint = app.config.get('OIDC_REDIRECT_ENDPOINT')
+            if redirect_endpoint[0] == '/':
+                raise ValueError('The OIDC_REDIRECT_ENDPOINT should not start with a slash.')
+            self._redirect_uri_endpoint = redirect_endpoint
+
         # setup redirect_uri as a flask route
-        app.add_url_rule('/redirect_uri',
-                         self.REDIRECT_URI_ENDPOINT,
+        app.add_url_rule('/' + self._redirect_uri_endpoint,
+                         self._redirect_uri_endpoint,
                          self._handle_authentication_response,
                          methods=['GET', 'POST'])
 
         # dynamically add the Flask redirect uri to the client info
         with app.app_context():
             self.clients = {
-                name: PyoidcFacade(configuration, url_for(self.REDIRECT_URI_ENDPOINT))
+                name: PyoidcFacade(configuration, url_for(self._redirect_uri_endpoint))
                 for (name, configuration) in self._provider_configurations.items()
             }
 
