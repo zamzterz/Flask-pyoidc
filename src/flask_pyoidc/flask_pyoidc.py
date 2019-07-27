@@ -167,7 +167,7 @@ class OIDCAuthentication(object):
             # if the current request was from the JS page handling fragment encoded responses we need to return
             # a URL for the error page to redirect to
             flask.session['error'] = error_response
-            return '/redirect_uri?error=1'
+            return '/' + self._redirect_uri_endpoint + '?error=1'
         return self._show_error_response(error_response)
 
     def _show_error_response(self, error_response):
