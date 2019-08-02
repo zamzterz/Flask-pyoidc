@@ -468,3 +468,9 @@ class TestOIDCAuthentication(object):
         with pytest.raises(ValueError) as exc_info:
             self.init_app().oidc_auth('unknown')
         assert 'unknown' in str(exc_info.value)
+
+    def test_should_use_custom_redirect_endpoint(self):
+        self.app.config['OIDC_REDIRECT_ENDPOINT'] = '/openid_connect_login'
+        authn = self.init_app()
+        assert authn._redirect_uri_endpoint == 'openid_connect_login'
+        assert authn.clients['test_provider']._redirect_uri == 'http://client.example.com/openid_connect_login'

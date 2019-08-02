@@ -36,12 +36,11 @@ try:
 except ImportError:
     from urlparse import parse_qsl
 
+
 class OIDCAuthentication(object):
     """
     OIDCAuthentication object for Flask extension.
     """
-
-    REDIRECT_URI_ENDPOINT = 'redirect_uri'
 
     def __init__(self, provider_configurations, app=None):
         """
@@ -55,21 +54,24 @@ class OIDCAuthentication(object):
         self.clients = None
         self._logout_view = None
         self._error_view = None
+        self._redirect_uri_endpoint = None
 
         if app:
             self.init_app(app)
 
     def init_app(self, app):
+        self._redirect_uri_endpoint = app.config.get('OIDC_REDIRECT_ENDPOINT', 'redirect_uri').lstrip('/')
+
         # setup redirect_uri as a flask route
-        app.add_url_rule('/redirect_uri',
-                         self.REDIRECT_URI_ENDPOINT,
+        app.add_url_rule('/' + self._redirect_uri_endpoint,
+                         self._redirect_uri_endpoint,
                          self._handle_authentication_response,
                          methods=['GET', 'POST'])
 
         # dynamically add the Flask redirect uri to the client info
         with app.app_context():
             self.clients = {
-                name: PyoidcFacade(configuration, url_for(self.REDIRECT_URI_ENDPOINT))
+                name: PyoidcFacade(configuration, url_for(self._redirect_uri_endpoint))
                 for (name, configuration) in self._provider_configurations.items()
             }
 
@@ -161,7 +163,7 @@ class OIDCAuthentication(object):
             # if the current request was from the JS page handling fragment encoded responses we need to return
             # a URL for the error page to redirect to
             flask.session['error'] = error_response
-            return '/redirect_uri?error=1'
+            return '/' + self._redirect_uri_endpoint + '?error=1'
         return self._show_error_response(error_response)
 
     def _show_error_response(self, error_response):
