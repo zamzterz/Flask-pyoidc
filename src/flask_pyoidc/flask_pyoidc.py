@@ -54,17 +54,13 @@ class OIDCAuthentication(object):
         self.clients = None
         self._logout_view = None
         self._error_view = None
-        self._redirect_uri_endpoint = 'redirect_uri'
+        self._redirect_uri_endpoint = None
 
         if app:
             self.init_app(app)
 
     def init_app(self, app):
-        if 'OIDC_REDIRECT_ENDPOINT' in app.config:
-            redirect_endpoint = app.config.get('OIDC_REDIRECT_ENDPOINT')
-            if redirect_endpoint[0] == '/':
-                raise ValueError('The OIDC_REDIRECT_ENDPOINT should not start with a slash.')
-            self._redirect_uri_endpoint = redirect_endpoint
+        self._redirect_uri_endpoint = app.config.get('OIDC_REDIRECT_ENDPOINT', 'redirect_uri').lstrip('/')
 
         # setup redirect_uri as a flask route
         app.add_url_rule('/' + self._redirect_uri_endpoint,
