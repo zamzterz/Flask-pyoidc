@@ -1,7 +1,6 @@
-import time
-
 import pytest
-from mock import patch
+import time
+from unittest.mock import patch
 
 from flask_pyoidc.user_session import UserSession, UninitialisedSession
 

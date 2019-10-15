@@ -1,18 +1,18 @@
-import time
-
-import flask
 import json
 import logging
+
+import flask
 import pytest
 import responses
+import time
 from datetime import datetime
 from flask import Flask
+from http.cookies import SimpleCookie
 from jwkest import jws
-from mock import MagicMock, patch
 from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
-from six.moves.http_cookies import SimpleCookie
-from six.moves.urllib.parse import parse_qsl, urlparse, urlencode
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qsl, urlparse, urlencode
 
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
@@ -60,7 +60,7 @@ class TestOIDCAuthentication(object):
 
     def get_view_mock(self):
         mock = MagicMock()
-        mock.__name__ = 'test_callback'  # required for Python 2
+        mock.__name__ = 'test_callback'
         mock.return_value = self.CALLBACK_RETURN_VALUE
         return mock
 
