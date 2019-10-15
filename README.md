@@ -169,8 +169,8 @@ def logout():
     return 'You\'ve been successfully logged out!'
 ```
 
-If the logout view is mounted under a custom endpoint
-([Flask uses the name of the view function as default](http://flask.pocoo.org/docs/1.0/api/#flask.Flask.route)) or in an app using Blueprints, you
+If the logout view is mounted under a custom endpoint (other than the default, which is 
+[the name of the view function](http://flask.pocoo.org/docs/1.0/api/#flask.Flask.route)), or if using Blueprints, you
 must specify the full URL in the Flask-pyoidc configuration using `post_logout_redirect_uris`:
 ```python
 ClientMetadata(..., post_logout_redirect_uris=['https://example.com/post_logout']) # if using static client registration
