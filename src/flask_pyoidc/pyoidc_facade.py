@@ -9,7 +9,7 @@ from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 logger = logging.getLogger(__name__)
 
 
-class _ClientAuthentication(object):
+class _ClientAuthentication:
     def __init__(self, client_id, client_secret):
         self._client_id = client_id
         self._client_secret = client_secret
@@ -37,7 +37,7 @@ class _ClientAuthentication(object):
         return {'Authorization': basic_auth}
 
 
-class PyoidcFacade(object):
+class PyoidcFacade:
     """
     Wrapper around pyoidc library, coupled with config for a simplified API for flask-pyoidc.
     """

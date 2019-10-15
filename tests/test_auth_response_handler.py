@@ -1,7 +1,7 @@
 import pytest
-from mock import create_autospec
 from oic.oic import AuthorizationResponse, AccessTokenResponse, IdToken, TokenErrorResponse, \
     OpenIDSchema, AuthorizationErrorResponse
+from unittest.mock import create_autospec
 
 from flask_pyoidc.auth_response_handler import AuthResponseHandler, AuthResponseUnexpectedStateError, \
     AuthResponseUnexpectedNonceError, AuthResponseErrorResponseError, AuthResponseMismatchingSubjectError

@@ -14,15 +14,17 @@
    limitations under the License.
 """
 
-import flask
 import functools
 import json
 import logging
+
+import flask
 import pkg_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic.message import EndSessionRequest
+from urllib.parse import parse_qsl
 from werkzeug.utils import redirect
 
 from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
@@ -31,13 +33,8 @@ from .user_session import UserSession
 
 logger = logging.getLogger(__name__)
 
-try:
-    from urllib.parse import parse_qsl
-except ImportError:
-    from urlparse import parse_qsl
 
-
-class OIDCAuthentication(object):
+class OIDCAuthentication:
     """
     OIDCAuthentication object for Flask extension.
     """
@@ -91,8 +88,9 @@ class OIDCAuthentication(object):
             return []
 
         client_registration_args = {}
-        post_logout_redirect_uris = client._provider_configuration._client_registration_info.get('post_logout_redirect_uris',
-                                                                                                 default_post_logout_redirect_uris())
+        post_logout_redirect_uris = client._provider_configuration._client_registration_info.get(
+            'post_logout_redirect_uris',
+            default_post_logout_redirect_uris())
         if post_logout_redirect_uris:
             logger.debug('registering with post_logout_redirect_uris=%s', post_logout_redirect_uris)
             client_registration_args['post_logout_redirect_uris'] = post_logout_redirect_uris

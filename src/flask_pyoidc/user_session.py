@@ -5,7 +5,7 @@ class UninitialisedSession(Exception):
     pass
 
 
-class UserSession(object):
+class UserSession:
     """Session object for user login state.
 
     Wraps comparison of times necessary for session handling.
