@@ -44,10 +44,8 @@ class OIDCData(collections.MutableMapping):
     def __repr__(self):
         return str(self.store)
 
-    def __nonzero__(self):
+    def __bool__(self):
         return True
-
-    __bool__ = __nonzero__  # for Python 3
 
     def copy(self, **kwargs):
         values = self.to_dict()
@@ -72,7 +70,7 @@ class ClientMetadata(OIDCData):
         super(ClientMetadata, self).__init__(client_id=client_id, client_secret=client_secret, **kwargs)
 
 
-class ProviderConfiguration(object):
+class ProviderConfiguration:
     """
     Metadata for communicating with a OpenID Connect Provider (OP).
 
