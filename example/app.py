@@ -1,10 +1,9 @@
 import datetime
-
 import flask
 import logging
 from flask import Flask, jsonify
 
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
 from flask_pyoidc.user_session import UserSession
 
