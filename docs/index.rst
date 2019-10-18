@@ -5,6 +5,8 @@ Welcome to flask-pyoidc's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   quickstart
+   configuration
    api
 
 
