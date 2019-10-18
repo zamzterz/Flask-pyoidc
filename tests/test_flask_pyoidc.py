@@ -14,7 +14,7 @@ from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
 
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
+from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.user_session import UserSession

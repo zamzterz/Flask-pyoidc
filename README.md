@@ -119,9 +119,9 @@ To add authentication to one of your endpoints use the `oidc_auth` decorator:
 import flask
 from flask import Flask, jsonify
 
+from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration
 from flask_pyoidc.user_session import UserSession
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 app = Flask(__name__)
 config = ProviderConfiguration(...)
@@ -147,8 +147,8 @@ provider):
 To allow users to login with multiple different providers, configure all of them in the `OIDCAuthentication`
 constructor and specify which one to use by name for each endpoint:
 ```python
+from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration
-from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 
 app = Flask(__name__)
 auth = OIDCAuthentication({'provider1': ProviderConfiguration(...), 'provider2': ProviderConfiguration(...)}, app)
