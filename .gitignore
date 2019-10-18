@@ -9,3 +9,6 @@ dist/
 coverage.xml
 .pytest_cache
 .venv/
+docs/_build
+docs/_static
+docs/_templates

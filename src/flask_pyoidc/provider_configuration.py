@@ -72,7 +72,7 @@ class ClientMetadata(OIDCData):
 
 class ProviderConfiguration:
     """
-    Metadata for communicating with a OpenID Connect Provider (OP).
+    Metadata for communicating with an OpenID Connect Provider (OP).
 
     Attributes:
         auth_request_params (dict): Extra parameters, as key-value pairs, to include in the query parameters
