@@ -11,5 +11,5 @@ This Flask extension provides simple OpenID Connect authentication, backed by [p
 ["Hybrid Flow"](https://openid.net/specs/openid-connect-core-1_0.html#HybridFlowAuth), is supported.
 
 ## Getting started
-Read the documentation or have a look at the [example Flask app](example/app.py) for a full example of how to use this
-extension.
+Read [the documentation](https://flask-pyoidc.readthedocs.io/) or have a look at the
+[example Flask app](example/app.py) for a full example of how to use this extension.
