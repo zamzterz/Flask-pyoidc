@@ -3,7 +3,6 @@
 API
 ===
 
-
 Flask-pyoidc extension
 ----------------------
 .. autoclass:: flask_pyoidc.OIDCAuthentication
@@ -26,5 +25,3 @@ Internals
 
 .. automodule:: flask_pyoidc.pyoidc_facade
    :members:
-
-
