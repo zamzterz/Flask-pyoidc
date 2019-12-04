@@ -250,7 +250,7 @@ class TestOIDCAuthentication(object):
         authn = self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
         auth_response = AuthorizationResponse(
-            **{'state': state, 'access_token': access_token, 'id_token': id_token_jwt})
+            **{'state': state, 'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt})
         with self.app.test_request_context('/redirect_uri?{}'.format(auth_response.to_urlencoded())):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['destination'] = '/'
@@ -268,7 +268,7 @@ class TestOIDCAuthentication(object):
         state = 'test_state'
 
         authn = self.init_app()
-        auth_response = AuthorizationResponse(**{'state': state, 'access_token': access_token})
+        auth_response = AuthorizationResponse(**{'state': state, 'token_type': 'Bearer', 'access_token': access_token})
 
         with self.app.test_request_context('/redirect_uri',
                                            method='POST',

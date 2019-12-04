@@ -2,8 +2,9 @@ import base64
 import json
 
 import logging
-from oic.oic import Client, ProviderConfigurationResponse, RegistrationResponse, AuthorizationResponse, \
+from oic.oic import Client, RegistrationResponse, AuthorizationResponse, \
     AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse
+from oic.oic.message import ProviderConfigurationResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
 logger = logging.getLogger(__name__)
