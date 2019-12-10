@@ -28,7 +28,7 @@ from werkzeug.utils import redirect
 
 from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
 from .pyoidc_facade import PyoidcFacade
-from .user_session import UserSession
+from .user_session import UninitialisedSession, UserSession
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,12 @@ class OIDCAuthentication:
 
     def _logout(self):
         logger.debug('user logout')
-        session = UserSession(flask.session)
+        try:
+            session = UserSession(flask.session)
+        except UninitialisedSession as e:
+            logger.info('user was already logged out, doing nothing')
+            return None
+
         id_token_jwt = session.id_token_jwt
         client = self.clients[session.current_provider]
         session.clear()
