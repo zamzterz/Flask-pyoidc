@@ -421,6 +421,14 @@ class TestOIDCAuthentication(object):
                                             logging.ERROR,
                                             "Got unexpected state '{}' after logout redirect.".format(state))
 
+    def test_logout_handles_no_user_session(self):
+        authn = self.init_app()
+        logout_view_mock = self.get_view_mock()
+        with self.app.test_request_context('/logout'):
+            result = authn.oidc_logout(logout_view_mock)()
+
+        self.assert_view_mock(logout_view_mock, result)
+
     def test_authentication_error_response_calls_to_error_view_if_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error'}
