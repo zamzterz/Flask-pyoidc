@@ -16,9 +16,10 @@ setup(
     install_requires=[
         'oic==1.1.2',
         'Flask',
-        'requests'
+        'requests',
+        'importlib_resources'
     ],
-    package_data={'flask_pyoidc': ['files/parse_fragment.html']},
+    package_data={'flask_pyoidc': ['parse_fragment.html']},
     long_description=long_description,
     long_description_content_type='text/markdown',
 )

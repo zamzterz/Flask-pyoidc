@@ -18,7 +18,7 @@ import json
 import logging
 
 import flask
-import pkg_resources
+import importlib_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
@@ -125,7 +125,7 @@ class OIDCAuthentication:
             return 'Something went wrong.'
 
         if flask.session.pop('fragment_encoded_response', False):
-            return pkg_resources.resource_string(__name__, 'files/parse_fragment.html').decode('utf-8')
+            return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
 
         is_processing_fragment_encoded_response = flask.request.method == 'POST'
 
