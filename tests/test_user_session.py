@@ -54,8 +54,8 @@ class TestUserSession(object):
         session_storage = {'last_session_refresh': time.time() - (refresh_interval + 1)}
         assert self.initialised_session(session_storage).should_refresh(refresh_interval) is True
 
-    def test_should_refresh_if_supported_and_not_previously_authenticated(self):
-        assert self.initialised_session({}).should_refresh(10) is True
+    def test_should_not_refresh_if_not_previously_authenticated(self):
+        assert self.initialised_session({}).should_refresh(10) is False
 
     @pytest.mark.parametrize('data', [
         {'access_token': 'test_access_token'},

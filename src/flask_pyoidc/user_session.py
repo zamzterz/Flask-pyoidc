@@ -36,6 +36,7 @@ class UserSession:
 
     def should_refresh(self, refresh_interval_seconds=None):
         return refresh_interval_seconds is not None and \
+               self._session_storage.get('last_session_refresh') is not None and \
                self._refresh_time(refresh_interval_seconds) < time.time()
 
     def _refresh_time(self, refresh_interval_seconds):
