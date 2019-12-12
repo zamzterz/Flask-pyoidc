@@ -71,7 +71,11 @@ class TestUserSession(object):
 
         self.initialised_session(storage).update(**data)
 
-        expected_session_data = {'last_authenticated': auth_time, 'last_session_refresh': auth_time, 'current_provider': self.PROVIDER_NAME}
+        expected_session_data = {
+            'last_authenticated': auth_time,
+            'last_session_refresh': auth_time,
+            'current_provider': self.PROVIDER_NAME
+        }
         expected_session_data.update(**data)
         assert storage == expected_session_data
 

@@ -11,7 +11,15 @@ class UserSession:
     Wraps comparison of times necessary for session handling.
     """
 
-    KEYS = ['access_token', 'current_provider', 'id_token', 'id_token_jwt', 'last_authenticated', 'last_session_refresh', 'userinfo']
+    KEYS = [
+        'access_token',
+        'current_provider',
+        'id_token',
+        'id_token_jwt',
+        'last_authenticated',
+        'last_session_refresh',
+        'userinfo'
+    ]
 
     def __init__(self, session_storage, provider_name=None):
         self._session_storage = session_storage
