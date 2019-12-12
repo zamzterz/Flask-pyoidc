@@ -45,13 +45,13 @@ class TestUserSession(object):
 
     def test_should_not_refresh_if_authenticated_within_refresh_interval(self):
         refresh_interval = 10
-        session = self.initialised_session({'last_authenticated': time.time() + (refresh_interval - 1)})
+        session = self.initialised_session({'last_session_refresh': time.time() + (refresh_interval - 1)})
         assert session.should_refresh(refresh_interval) is False
 
     def test_should_refresh_if_supported_and_necessary(self):
         refresh_interval = 10
         # authenticated too far in the past
-        session_storage = {'last_authenticated': time.time() - (refresh_interval + 1)}
+        session_storage = {'last_session_refresh': time.time() - (refresh_interval + 1)}
         assert self.initialised_session(session_storage).should_refresh(refresh_interval) is True
 
     def test_should_refresh_if_supported_and_not_previously_authenticated(self):
@@ -71,7 +71,7 @@ class TestUserSession(object):
 
         self.initialised_session(storage).update(**data)
 
-        expected_session_data = {'last_authenticated': auth_time, 'current_provider': self.PROVIDER_NAME}
+        expected_session_data = {'last_authenticated': auth_time, 'last_session_refresh': auth_time, 'current_provider': self.PROVIDER_NAME}
         expected_session_data.update(**data)
         assert storage == expected_session_data
 
@@ -80,6 +80,15 @@ class TestUserSession(object):
         session = self.initialised_session({})
         session.update(id_token={'auth_time': auth_time})
         assert session.last_authenticated == auth_time
+
+    @patch('time.time')
+    def test_update_should_update_last_session_refresh_timestamp(self, time_mock):
+        now_timestamp = 1234
+        time_mock.return_value = now_timestamp
+        data = {}
+        session = self.initialised_session(data)
+        session.update()
+        assert data['last_session_refresh'] == now_timestamp
 
     def test_trying_to_update_uninitialised_session_should_throw_exception(self):
         with pytest.raises(UninitialisedSession):
