@@ -11,7 +11,15 @@ class UserSession:
     Wraps comparison of times necessary for session handling.
     """
 
-    KEYS = ['access_token', 'current_provider', 'id_token', 'id_token_jwt', 'last_authenticated', 'userinfo']
+    KEYS = [
+        'access_token',
+        'current_provider',
+        'id_token',
+        'id_token_jwt',
+        'last_authenticated',
+        'last_session_refresh',
+        'userinfo'
+    ]
 
     def __init__(self, session_storage, provider_name=None):
         self._session_storage = session_storage
@@ -36,10 +44,11 @@ class UserSession:
 
     def should_refresh(self, refresh_interval_seconds=None):
         return refresh_interval_seconds is not None and \
+               self._session_storage.get('last_session_refresh') is not None and \
                self._refresh_time(refresh_interval_seconds) < time.time()
 
     def _refresh_time(self, refresh_interval_seconds):
-        last = self._session_storage.get('last_authenticated', 0)
+        last = self._session_storage.get('last_session_refresh', 0)
         return last + refresh_interval_seconds
 
     def update(self, access_token=None, id_token=None, id_token_jwt=None, userinfo=None):
@@ -55,11 +64,13 @@ class UserSession:
             if value:
                 self._session_storage[session_key] = value
 
-        auth_time = int(time.time())
+        now = int(time.time())
+        auth_time = now
         if id_token:
             auth_time = id_token.get('auth_time', auth_time)
 
         self._session_storage['last_authenticated'] = auth_time
+        self._session_storage['last_session_refresh'] = now
         set_if_defined('access_token', access_token)
         set_if_defined('id_token', id_token)
         set_if_defined('id_token_jwt', id_token_jwt)
