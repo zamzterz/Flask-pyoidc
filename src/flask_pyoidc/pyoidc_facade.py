@@ -49,7 +49,8 @@ class PyoidcFacade:
             provider_configuration (flask_pyoidc.provider_configuration.ProviderConfiguration)
         """
         self._provider_configuration = provider_configuration
-        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
+        verify_ssl = provider_configuration.requests_session.verify if provider_configuration.requests_session else True
+        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD, verify_ssl=verify_ssl)
 
         provider_metadata = provider_configuration.ensure_provider_metadata()
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
