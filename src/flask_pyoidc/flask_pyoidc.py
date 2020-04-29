@@ -16,6 +16,7 @@
 import functools
 import json
 import logging
+from urllib.parse import parse_qsl, urlunparse
 
 import flask
 import importlib_resources
@@ -23,7 +24,6 @@ from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
 from oic.oic.message import EndSessionRequest
-from urllib.parse import parse_qsl
 from werkzeug.utils import redirect
 
 from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
@@ -65,11 +65,20 @@ class OIDCAuthentication:
                          methods=['GET', 'POST'])
 
         # dynamically add the Flask redirect uri to the client info
-        with app.app_context():
-            self.clients = {
-                name: PyoidcFacade(configuration, url_for(self._redirect_uri_endpoint))
-                for (name, configuration) in self._provider_configurations.items()
-            }
+        redirect_uri = self._get_redirect_uri(app)
+        self.clients = {
+            name: PyoidcFacade(configuration, redirect_uri)
+            for (name, configuration) in self._provider_configurations.items()
+        }
+
+    def _get_redirect_uri(self, app):
+        redirect_domain = app.config.get('OIDC_REDIRECT_DOMAIN', app.config.get('SERVER_NAME'))
+
+        if redirect_domain:
+            scheme = app.config.get('PREFERRED_URL_SCHEME', 'http')
+            return urlunparse((scheme, redirect_domain, self._redirect_uri_endpoint, '', '', ''))
+        else:
+            raise ValueError("'OIDC_REDIRECT_DOMAIN' must be configured.")
 
     def _get_post_logout_redirect_uri(self, client):
         if client.post_logout_redirect_uris:
