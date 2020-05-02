@@ -66,10 +66,8 @@ client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wL
 config = ProviderConfiguration([provider configuration], client_metadata=client_metadata)
 ```
 
-**Note: The redirect URIs registered with the provider MUST include `<application_url>/redirect_uri`,
-where `<application_url>` is the URL of the Flask application.**
-To configure this extension to use a different location, set the
-[`OIDC_REDIRECT_DOMAIN` and/or `OIDC_REDIRECT_ENDPOINT` configuration parameter](#flask-configuration).
+**Note: The redirect URIs registered with the provider MUST include the URI specified in 
+[`OIDC_REDIRECT_URI`](#flask-configuration).**
 
 #### Dynamic client registration
 
@@ -84,19 +82,23 @@ config = ProviderConfiguration([provider configuration], client_registration_inf
 
 ## Flask configuration
 
-The application using this extension **MUST** set the following
-[builtin configuration values of Flask](http://flask.pocoo.org/docs/config/#builtin-configuration-values):
+The application using this extension **MUST** set the following configuration parameters:
 
 * `SECRET_KEY`: This extension relies on [Flask sessions](http://flask.pocoo.org/docs/quickstart/#sessions), which
-   requires `SECRET_KEY`.
+   requires [`SECRET_KEY`](http://flask.pocoo.org/docs/config/#builtin-configuration-values).
+* `OIDC_REDIRECT_URI`: The URI used as redirect URI to receive authentication responses. This extension will add a url
+   rule to handle all requests to the specified endpoint, so make sure the domain correctly points to your app and that
+   the URL path is not already used in the app.
 
-This extension also defines the following configuration parameters:
-
-* `OIDC_REDIRECT_DOMAIN`: Set the domain (which may contain port number) used in the redirect_uri to receive
-  authentication responses. Defaults to the `SERVER_NAME` configured for Flask.
-* `OIDC_REDIRECT_ENDPOINT`: Set the endpoint used in the redirect_uri to receive authentication responses. Defaults to
-  `redirect_uri`, meaning the URL `<application_url>/redirect_uri` needs to be registered with the provider(s).
+This extension also uses the following configuration parameters:
 * `OIDC_SESSION_PERMANENT`: If set to `True` (which is the default) the user session will be kept until the configured
   session lifetime (see below). If set to `False` the session will be deleted when the user closes the browser.
 * `PERMANENT_SESSION_LIFETIME`: Control how long a user session is valid, see
   [Flask documentation](http://flask.pocoo.org/docs/1.0/config/#PERMANENT_SESSION_LIFETIME) for more information.
+
+#### Legacy configuration parameters
+The following parameters have been deprecated:
+* `OIDC_REDIRECT_DOMAIN`: Set the domain (which may contain port number) used in the redirect_uri to receive
+  authentication responses. Defaults to the `SERVER_NAME` configured for Flask.
+* `OIDC_REDIRECT_ENDPOINT`: Set the endpoint used in the redirect_uri to receive authentication responses. Defaults to
+  `redirect_uri`, meaning the URL `<application_url>/redirect_uri` needs to be registered with the provider(s).

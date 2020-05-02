@@ -16,7 +16,7 @@
 import functools
 import json
 import logging
-from urllib.parse import parse_qsl, urlunparse
+from urllib.parse import parse_qsl
 
 import flask
 import importlib_resources
@@ -28,6 +28,7 @@ from werkzeug.utils import redirect
 
 from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
 from .pyoidc_facade import PyoidcFacade
+from .redirect_uri_config import RedirectUriConfig
 from .user_session import UninitialisedSession, UserSession
 
 logger = logging.getLogger(__name__)
@@ -50,35 +51,25 @@ class OIDCAuthentication:
         self.clients = None
         self._logout_view = None
         self._error_view = None
-        self._redirect_uri_endpoint = None
+        self._redirect_uri_config = None
 
         if app:
             self.init_app(app)
 
     def init_app(self, app):
-        self._redirect_uri_endpoint = app.config.get('OIDC_REDIRECT_ENDPOINT', 'redirect_uri').lstrip('/')
+        self._redirect_uri_config = RedirectUriConfig(app.config)
 
         # setup redirect_uri as a flask route
-        app.add_url_rule('/' + self._redirect_uri_endpoint,
-                         self._redirect_uri_endpoint,
+        app.add_url_rule('/' + self._redirect_uri_config.endpoint,
+                         self._redirect_uri_config.endpoint,
                          self._handle_authentication_response,
                          methods=['GET', 'POST'])
 
         # dynamically add the Flask redirect uri to the client info
-        redirect_uri = self._get_redirect_uri(app)
         self.clients = {
-            name: PyoidcFacade(configuration, redirect_uri)
+            name: PyoidcFacade(configuration, self._redirect_uri_config.full_uri)
             for (name, configuration) in self._provider_configurations.items()
         }
-
-    def _get_redirect_uri(self, app):
-        redirect_domain = app.config.get('OIDC_REDIRECT_DOMAIN', app.config.get('SERVER_NAME'))
-
-        if redirect_domain:
-            scheme = app.config.get('PREFERRED_URL_SCHEME', 'http')
-            return urlunparse((scheme, redirect_domain, self._redirect_uri_endpoint, '', '', ''))
-        else:
-            raise ValueError("'OIDC_REDIRECT_DOMAIN' must be configured.")
 
     def _get_post_logout_redirect_uri(self, client):
         if client.post_logout_redirect_uris:

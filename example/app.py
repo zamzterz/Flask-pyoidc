@@ -9,10 +9,9 @@ from flask_pyoidc.user_session import UserSession
 
 app = Flask(__name__)
 # See http://flask.pocoo.org/docs/0.12/config/
-app.config.update({'SERVER_NAME': 'localhost:5000',
+app.config.update({'OIDC_REDIRECT_URI': 'http://localhost:5000/redirect_uri',
                    'SECRET_KEY': 'dev_key',  # make sure to change this!!
                    'PERMANENT_SESSION_LIFETIME': datetime.timedelta(days=7).total_seconds(),
-                   'PREFERRED_URL_SCHEME': 'http',
                    'DEBUG': True})
 
 ISSUER1 = 'https://provider1.example.com'
