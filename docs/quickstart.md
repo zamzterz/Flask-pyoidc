@@ -10,6 +10,10 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration
 from flask_pyoidc.user_session import UserSession
 
 app = Flask(__name__)
+app.config.update(
+    OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
+    SECRET_KEY = ...
+)
 config = ProviderConfiguration(...)
 auth = OIDCAuthentication({'default': config}, app)
 
@@ -37,6 +41,10 @@ from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration
 
 app = Flask(__name__)
+app.config.update(
+    OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
+    SECRET_KEY = ...
+)
 auth = OIDCAuthentication({'provider1': ProviderConfiguration(...), 'provider2': ProviderConfiguration(...)}, app)
 
 @app.route('/login1')
