@@ -51,7 +51,7 @@ class UserSession:
         last = self._session_storage.get('last_session_refresh', 0)
         return last + refresh_interval_seconds
 
-    def update(self, access_token=None, id_token=None, id_token_jwt=None, userinfo=None):
+    def update(self, *, access_token=None, id_token=None, id_token_jwt=None, userinfo=None):
         """
         Args:
             access_token (str)

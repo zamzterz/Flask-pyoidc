@@ -152,10 +152,10 @@ class OIDCAuthentication:
         if current_app.config.get('OIDC_SESSION_PERMANENT', True):
             flask.session.permanent = True
 
-        UserSession(flask.session).update(result.access_token,
-                                          result.id_token_claims,
-                                          result.id_token_jwt,
-                                          result.userinfo_claims)
+        UserSession(flask.session).update(access_token=result.access_token,
+                                          id_token=result.id_token_claims,
+                                          id_token_jwt=result.id_token_jwt,
+                                          userinfo=result.userinfo_claims)
 
         destination = flask.session.pop('destination')
         if is_processing_fragment_encoded_response:
