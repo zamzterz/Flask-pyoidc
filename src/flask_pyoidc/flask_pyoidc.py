@@ -153,6 +153,7 @@ class OIDCAuthentication:
             flask.session.permanent = True
 
         UserSession(flask.session).update(access_token=result.access_token,
+                                          expires_in=result.expires_in,
                                           id_token=result.id_token_claims,
                                           id_token_jwt=result.id_token_jwt,
                                           userinfo=result.userinfo_claims)

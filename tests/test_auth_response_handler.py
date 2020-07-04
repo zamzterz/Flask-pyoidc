@@ -12,6 +12,7 @@ class TestAuthResponseHandler:
     AUTH_RESPONSE = AuthorizationResponse(**{'code': 'test_auth_code', 'state': 'test_state'})
     TOKEN_RESPONSE = AccessTokenResponse(**{
         'access_token': 'test_token',
+        'expires_in': 3600,
         'id_token': IdToken(**{'sub': 'test_sub', 'nonce': 'test_nonce'}),
         'id_token_jwt': 'test_id_token_jwt'
     })
@@ -61,6 +62,7 @@ class TestAuthResponseHandler:
                                                                         self.AUTH_RESPONSE['state'],
                                                                         self.TOKEN_RESPONSE['id_token']['nonce'])
         assert result.access_token == 'test_token'
+        assert result.expires_in == self.TOKEN_RESPONSE['expires_in']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
@@ -72,6 +74,7 @@ class TestAuthResponseHandler:
         result = AuthResponseHandler(client_mock).process_auth_response(auth_response, 'test_state')
         assert not client_mock.token_request.called
         assert result.access_token == 'test_token'
+        assert result.expires_in == self.TOKEN_RESPONSE['expires_in']
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()

@@ -186,7 +186,13 @@ class TestOIDCAuthentication(object):
         }
         id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
         access_token = 'test_access_token'
-        token_response = {'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt}
+        expires_in = 3600
+        token_response = {
+            'access_token': access_token,
+            'expires_in': expires_in,
+            'token_type': 'Bearer',
+            'id_token': id_token_jwt
+        }
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         responses.add(responses.POST, token_endpoint, json=token_response)
         responses.add(responses.GET,
@@ -209,6 +215,7 @@ class TestOIDCAuthentication(object):
             authn._handle_authentication_response()
             session = UserSession(flask.session)
             assert session.access_token == access_token
+            assert session.access_token_expires_at == int(timestamp) + expires_in
             assert session.id_token == id_token_claims
             assert session.id_token_jwt == id_token_jwt
             assert session.userinfo == userinfo
