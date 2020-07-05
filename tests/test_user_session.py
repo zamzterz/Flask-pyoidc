@@ -103,7 +103,7 @@ class TestUserSession(object):
         session_storage = expected_data.copy()
 
         session = self.initialised_session(session_storage)
-        session.update(access_token='access_token', id_token={'sub': 'user1'}, id_token_jwt='eyJh.eyJz.SflK', userinfo={'sub': 'user1}'})
+        session.update(access_token='access_token', expires_in=3600, id_token={'sub': 'user1'}, id_token_jwt='eyJh.eyJz.SflK', userinfo={'sub': 'user1}'})
         session.clear()
 
         assert session_storage == expected_data
