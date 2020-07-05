@@ -290,7 +290,7 @@ class OIDCAuthentication:
         client = self.clients[session.current_provider]
         response = client.refresh_token(session.refresh_token)
         if 'error' in response:
-            logger.info('failed to refresh access token: ' + json.dumps(response))
+            logger.info('failed to refresh access token: ' + json.dumps(response.to_dict()))
             return None
 
         access_token = response.get('access_token')

@@ -572,3 +572,21 @@ class TestOIDCAuthentication(object):
             session = UserSession(flask.session, self.PROVIDER_NAME)
             session.update(access_token=access_token, refresh_token='refresh-token')
             assert authn.valid_access_token() == access_token
+
+    @responses.activate
+    def test_should_return_None_if_token_refresh_request_fails(self):
+        token_endpoint = self.PROVIDER_BASEURL + '/token'
+        authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+
+        token_response = {
+            'error': 'invalid_grant',
+            'error_description': 'The refresh token is invalid'
+        }
+        responses.add(responses.POST, token_endpoint, json=token_response)
+
+        access_token = 'access_token'
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(access_token=access_token, expires_in=-10, refresh_token='refresh-token')
+            assert authn.valid_access_token(force_refresh=True) is None
+            assert session.access_token == access_token
