@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 AuthenticationResult = collections.namedtuple('AuthenticationResult',
-                                              ['access_token', 'id_token_claims', 'id_token_jwt', 'userinfo_claims'])
+                                              ['access_token', 'expires_in', 'id_token_claims', 'id_token_jwt', 'userinfo_claims'])
 
 
 class AuthResponseProcessError(ValueError):
@@ -57,6 +57,7 @@ class AuthResponseHandler:
 
         # implicit/hybrid flow may return tokens in the auth response
         access_token = auth_response.get('access_token', None)
+        expires_in = auth_response.get('expires_in', None)
         id_token_claims = auth_response['id_token'].to_dict() if 'id_token' in auth_response else None
         id_token_jwt = auth_response.get('id_token_jwt', None) if 'id_token_jwt' in auth_response else None
 
@@ -67,6 +68,7 @@ class AuthResponseHandler:
                     raise AuthResponseErrorResponseError(token_resp.to_dict())
 
                 access_token = token_resp['access_token']
+                expires_in = token_resp.get('expires_in', None)
 
                 if 'id_token' in token_resp:
                     id_token = token_resp['id_token']
@@ -87,7 +89,7 @@ class AuthResponseHandler:
         if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
             raise AuthResponseMismatchingSubjectError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
-        return AuthenticationResult(access_token, id_token_claims, id_token_jwt, userinfo_claims)
+        return AuthenticationResult(access_token, expires_in, id_token_claims, id_token_jwt, userinfo_claims)
 
     @classmethod
     def expect_fragment_encoded_response(cls, auth_request):
