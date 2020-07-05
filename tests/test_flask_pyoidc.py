@@ -502,3 +502,73 @@ class TestOIDCAuthentication(object):
         with pytest.raises(ValueError) as exc_info:
             self.init_app().oidc_auth('unknown')
         assert 'unknown' in str(exc_info.value)
+
+    def test_should_not_refresh_if_no_user_session(self):
+        with self.app.test_request_context('/foo'):
+            assert self.init_app().valid_access_token() is None
+
+    @responses.activate
+    def test_should_refresh_expired_access_token(self):
+        token_endpoint = self.PROVIDER_BASEURL + '/token'
+        authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+
+        token_response = {
+            'access_token': 'new-access-token',
+            'expires_in': 3600,
+            'token_type': 'Bearer',
+            'refresh_token': 'new-refresh-token'
+        }
+        responses.add(responses.POST, token_endpoint, json=token_response)
+
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(expires_in=-10, refresh_token='refresh-token')
+            assert authn.valid_access_token() == token_response['access_token']
+            assert session.access_token == token_response['access_token']
+            assert session.refresh_token == token_response['refresh_token']
+
+    def test_should_not_refresh_still_valid_access_token(self):
+        authn = self.init_app()
+
+        access_token = 'access_token'
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(access_token=access_token, expires_in=10, refresh_token='refresh-token')
+            assert authn.valid_access_token() == access_token
+
+    @responses.activate
+    def test_should_refresh_still_valid_access_token_if_forced(self):
+        token_endpoint = self.PROVIDER_BASEURL + '/token'
+        authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+
+        token_response = {
+            'access_token': 'new-access-token',
+            'expires_in': 3600,
+            'token_type': 'Bearer',
+            'refresh_token': 'new-refresh-token'
+        }
+        responses.add(responses.POST, token_endpoint, json=token_response)
+
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(expires_in=10, refresh_token='refresh-token')
+            assert authn.valid_access_token(force_refresh=True) == token_response['access_token']
+            assert session.access_token == token_response['access_token']
+            assert session.refresh_token == token_response['refresh_token']
+
+    def test_should_not_refresh_without_refresh_token(self):
+        authn = self.init_app()
+
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(expires_in=-10)
+            assert authn.valid_access_token() is None
+
+    def test_should_not_refresh_access_token_without_expiry(self):
+        authn = self.init_app()
+
+        access_token = 'access_token'
+        with self.app.test_request_context('/foo'):
+            session = UserSession(flask.session, self.PROVIDER_NAME)
+            session.update(access_token=access_token, refresh_token='refresh-token')
+            assert authn.valid_access_token() == access_token

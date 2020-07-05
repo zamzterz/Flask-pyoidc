@@ -12,6 +12,8 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMet
 from flask_pyoidc.pyoidc_facade import PyoidcFacade, _ClientAuthentication
 from .util import signed_id_token
 
+REDIRECT_URI = 'https://rp.example.com/redirect_uri'
+
 
 class TestPyoidcFacade(object):
     PROVIDER_BASEURL = 'https://op.example.com'
@@ -19,17 +21,16 @@ class TestPyoidcFacade(object):
                                          PROVIDER_BASEURL + '/auth',
                                          PROVIDER_BASEURL + '/jwks')
     CLIENT_METADATA = ClientMetadata('client1', 'secret1')
-    REDIRECT_URI = 'https://rp.example.com/redirect_uri'
 
     def test_registered_client_metadata_is_forwarded_to_pyoidc(self):
         config = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA, client_metadata=self.CLIENT_METADATA)
-        facade = PyoidcFacade(config, self.REDIRECT_URI)
+        facade = PyoidcFacade(config, REDIRECT_URI)
         assert facade._client.registration_response
 
     def test_no_registered_client_metadata_is_handled(self):
         config = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                        client_registration_info=ClientRegistrationInfo())
-        facade = PyoidcFacade(config, self.REDIRECT_URI)
+        facade = PyoidcFacade(config, REDIRECT_URI)
         assert not facade._client.registration_response
 
     def test_is_registered(self):
@@ -37,8 +38,8 @@ class TestPyoidcFacade(object):
                                              client_registration_info=ClientRegistrationInfo())
         registered = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                            client_metadata=self.CLIENT_METADATA)
-        assert PyoidcFacade(unregistered, self.REDIRECT_URI).is_registered() is False
-        assert PyoidcFacade(registered, self.REDIRECT_URI).is_registered() is True
+        assert PyoidcFacade(unregistered, REDIRECT_URI).is_registered() is False
+        assert PyoidcFacade(registered, REDIRECT_URI).is_registered() is True
 
     @responses.activate
     def test_register(self):
@@ -48,7 +49,7 @@ class TestPyoidcFacade(object):
         provider_metadata = self.PROVIDER_METADATA.copy(registration_endpoint=registration_endpoint)
         unregistered = ProviderConfiguration(provider_metadata=provider_metadata,
                                              client_registration_info=ClientRegistrationInfo())
-        facade = PyoidcFacade(unregistered, self.REDIRECT_URI)
+        facade = PyoidcFacade(unregistered, REDIRECT_URI)
         facade.register()
         assert facade.is_registered() is True
 
@@ -61,7 +62,7 @@ class TestPyoidcFacade(object):
         state = 'test_state'
         nonce = 'test_nonce'
 
-        facade = PyoidcFacade(config, self.REDIRECT_URI)
+        facade = PyoidcFacade(config, REDIRECT_URI)
         extra_lib_auth_params = {'foo': 'baz', 'qwe': 'rty'}
         auth_request = facade.authentication_request(state, nonce, extra_lib_auth_params)
         assert auth_request.startswith(self.PROVIDER_METADATA['authorization_endpoint'])
@@ -71,7 +72,7 @@ class TestPyoidcFacade(object):
             'scope': 'openid',
             'response_type': 'code',
             'client_id': self.CLIENT_METADATA['client_id'],
-            'redirect_uri': self.REDIRECT_URI,
+            'redirect_uri': REDIRECT_URI,
             'state': state,
             'nonce': nonce
         }
@@ -82,7 +83,7 @@ class TestPyoidcFacade(object):
     def test_parse_authentication_response(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         auth_code = 'auth_code-1234'
         state = 'state-1234'
         auth_response = AuthorizationResponse(**{'state': state, 'code': auth_code})
@@ -93,7 +94,7 @@ class TestPyoidcFacade(object):
     def test_parse_authentication_response_handles_error_response(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         error_response = AuthorizationErrorResponse(**{'error': 'invalid_request', 'state': 'state-1234'})
         parsed_auth_response = facade.parse_authentication_response(error_response)
         assert isinstance(parsed_auth_response, AuthorizationErrorResponse)
@@ -103,7 +104,7 @@ class TestPyoidcFacade(object):
     def test_parse_authentication_response_preserves_id_token_jwt(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         state = 'state-1234'
         now = int(time.time())
         id_token, id_token_signing_key = signed_id_token({
@@ -122,8 +123,26 @@ class TestPyoidcFacade(object):
         assert parsed_auth_response['state'] == state
         assert parsed_auth_response['id_token_jwt'] == id_token
 
+    @pytest.mark.parametrize('request_func,expected_token_request', [
+        (
+                lambda facade: facade.exchange_authorization_code('auth-code'),
+                {
+                    'grant_type': 'authorization_code',
+                    'code': 'auth-code',
+                    'redirect_uri': REDIRECT_URI
+                }
+        ),
+        (
+                lambda facade: facade.refresh_token('refresh-token'),
+                {
+                    'grant_type': 'refresh_token',
+                    'refresh_token': 'refresh-token',
+                    'redirect_uri': REDIRECT_URI
+                }
+        )
+    ])
     @responses.activate
-    def test_token_request(self):
+    def test_token_request(self, request_func, expected_token_request):
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         now = int(time.time())
         id_token_claims = {
@@ -143,13 +162,12 @@ class TestPyoidcFacade(object):
         provider_metadata = self.PROVIDER_METADATA.copy(token_endpoint=token_endpoint)
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
 
-        auth_code = 'auth_code-1234'
         responses.add(responses.GET,
                       self.PROVIDER_METADATA['jwks_uri'],
                       json={'keys': [id_token_signing_key.serialize()]})
-        token_response = facade.token_request(auth_code)
+        token_response = request_func(facade)
 
         assert isinstance(token_response, AccessTokenResponse)
         expected_token_response = token_response.to_dict()
@@ -158,12 +176,6 @@ class TestPyoidcFacade(object):
         assert token_response.to_dict() == expected_token_response
 
         token_request = dict(parse_qsl(responses.calls[0].request.body))
-        expected_token_request = {
-            'grant_type': 'authorization_code',
-            'code': auth_code,
-            'redirect_uri': self.REDIRECT_URI
-
-        }
         assert token_request == expected_token_request
 
     @responses.activate
@@ -175,14 +187,14 @@ class TestPyoidcFacade(object):
         provider_metadata = self.PROVIDER_METADATA.copy(token_endpoint=token_endpoint)
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
-        assert facade.token_request('1234') == token_response
+                              REDIRECT_URI)
+        assert facade.exchange_authorization_code('1234') == token_response
 
     def test_token_request_handles_missing_provider_token_endpoint(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
-        assert facade.token_request('1234') is None
+                              REDIRECT_URI)
+        assert facade.exchange_authorization_code('1234') is None
 
     @pytest.mark.parametrize('userinfo_http_method', [
         'GET',
@@ -198,27 +210,27 @@ class TestPyoidcFacade(object):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA,
                                                     userinfo_http_method=userinfo_http_method),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         assert facade.userinfo_request('test_token') == userinfo_response
 
     def test_no_userinfo_request_is_made_if_no_userinfo_http_method_is_configured(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA,
                                                     userinfo_http_method=None),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         assert facade.userinfo_request('test_token') is None
 
     def test_no_userinfo_request_is_made_if_no_userinfo_endpoint_is_configured(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         assert facade.userinfo_request('test_token') is None
 
     def test_no_userinfo_request_is_made_if_no_access_token(self):
         provider_metadata = self.PROVIDER_METADATA.copy(userinfo_endpoint=self.PROVIDER_BASEURL + '/userinfo')
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA),
-                              self.REDIRECT_URI)
+                              REDIRECT_URI)
         assert facade.userinfo_request(None) is None
 
 

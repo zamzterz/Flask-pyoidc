@@ -113,4 +113,3 @@ class TestUserSession(object):
         expires_in = 3600
         session.update(expires_in=expires_in)
         assert session.access_token_expires_at == int(time.time()) + expires_in
-

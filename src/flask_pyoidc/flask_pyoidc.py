@@ -16,6 +16,7 @@
 import functools
 import json
 import logging
+import time
 from urllib.parse import parse_qsl
 
 import flask
@@ -256,3 +257,46 @@ class OIDCAuthentication:
     def error_view(self, view_func):
         self._error_view = view_func
         return view_func
+
+    def valid_access_token(self, force_refresh=False):
+        """
+        Returns a valid access token.
+
+        1. If the current access token in the user session is valid, return that.
+        2. If the current access token has expired and there is a refresh token in the user session,
+           make a refresh token request and return the new access token.
+        3. If the token refresh fails, either due to missing refresh token or token error response, return None.
+
+        Args:
+            force_refresh (bool): whether to perform the refresh token request even if the current access token is valid
+        Returns:
+            Option[str]: valid access token
+        """
+        try:
+            session = UserSession(flask.session)
+        except UninitialisedSession:
+            logger.debug('user does not have an active session')
+            return None
+
+        has_expired = session.access_token_expires_at < time.time() if session.access_token_expires_at else False
+        if not has_expired and not force_refresh:
+            logger.debug("access token doesn't need to be refreshed")
+            return session.access_token
+
+        if not session.refresh_token:
+            logger.info('no refresh token exists in the session')
+            return None
+
+        client = self.clients[session.current_provider]
+        response = client.refresh_token(session.refresh_token)
+        if 'error' in response:
+            logger.info('failed to refresh access token: ' + json.dumps(response))
+            return None
+
+        access_token = response.get('access_token')
+        session.update(access_token=access_token,
+                       expires_in=response.get('expires_in'),
+                       id_token=response['id_token'].to_dict() if 'id_token' in response else None,
+                       id_token_jwt=response.get('id_token_jwt'),
+                       refresh_token=response.get('refresh_token'))
+        return access_token

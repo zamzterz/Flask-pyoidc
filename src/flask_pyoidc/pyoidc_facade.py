@@ -107,10 +107,9 @@ class PyoidcFacade:
             auth_resp['id_token_jwt'] = response_params['id_token']
         return auth_resp
 
-    def token_request(self, authorization_code):
+    def exchange_authorization_code(self, authorization_code):
         """
-        Makes a token request.  If the 'token_endpoint' is not configured in the provider metadata, no request will
-        be made.
+        Requests tokens from an authorization code.
 
         Args:
             authorization_code (str): authorization code issued to client after user authorization
@@ -119,14 +118,48 @@ class PyoidcFacade:
             Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
             request was performed.
         """
-        if not self._client.token_endpoint:
-            return None
-
         request = {
             'grant_type': 'authorization_code',
             'code': authorization_code,
             'redirect_uri': self._redirect_uri
         }
+
+        return self._token_request(request)
+
+    def refresh_token(self, refresh_token):
+        """
+        Requests new tokens using a refresh token.
+
+        Args:
+            refresh_token (str): refresh token issued to client after user authorization
+
+        Returns:
+            Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
+            request was performed.
+        """
+        request = {
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+            'redirect_uri': self._redirect_uri
+        }
+
+        return self._token_request(request)
+
+    def _token_request(self, request):
+        """
+        Makes a token request.  If the 'token_endpoint' is not configured in the provider metadata, no request will
+        be made.
+
+        Args:
+            request (Mapping[str, str]): token request parameters
+
+        Returns:
+            Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
+            request was performed.
+        """
+
+        if not self._client.token_endpoint:
+            return None
 
         logger.debug('making token request: %s', request)
         client_auth_method = self._client.registration_response.get('token_endpoint_auth_method', 'client_secret_basic')

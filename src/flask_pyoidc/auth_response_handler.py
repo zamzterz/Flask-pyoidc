@@ -66,11 +66,11 @@ class AuthResponseHandler:
         access_token = auth_response.get('access_token', None)
         expires_in = auth_response.get('expires_in', None)
         id_token_claims = auth_response['id_token'].to_dict() if 'id_token' in auth_response else None
-        id_token_jwt = auth_response.get('id_token_jwt', None) if 'id_token_jwt' in auth_response else None
+        id_token_jwt = auth_response.get('id_token_jwt', None)
         refresh_token = None  # but never refresh token
 
         if 'code' in auth_response:
-            token_resp = self._client.token_request(auth_response['code'])
+            token_resp = self._client.exchange_authorization_code(auth_response['code'])
             if token_resp:
                 if 'error' in token_resp:
                     raise AuthResponseErrorResponseError(token_resp.to_dict())
@@ -98,7 +98,11 @@ class AuthResponseHandler:
         if id_token_claims and userinfo_claims and userinfo_claims['sub'] != id_token_claims['sub']:
             raise AuthResponseMismatchingSubjectError('The \'sub\' of userinfo does not match \'sub\' of ID Token.')
 
-        return AuthenticationResult(access_token, expires_in, id_token_claims, id_token_jwt, userinfo_claims,
+        return AuthenticationResult(access_token,
+                                    expires_in,
+                                    id_token_claims,
+                                    id_token_jwt,
+                                    userinfo_claims,
                                     refresh_token)
 
     @classmethod
