@@ -13,6 +13,7 @@ class UserSession:
 
     KEYS = [
         'access_token',
+        'access_token_expires_at',
         'current_provider',
         'id_token',
         'id_token_jwt',
