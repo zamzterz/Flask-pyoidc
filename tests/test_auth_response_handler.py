@@ -14,7 +14,8 @@ class TestAuthResponseHandler:
         'access_token': 'test_token',
         'expires_in': 3600,
         'id_token': IdToken(**{'sub': 'test_sub', 'nonce': 'test_nonce'}),
-        'id_token_jwt': 'test_id_token_jwt'
+        'id_token_jwt': 'test_id_token_jwt',
+        'refresh_token': 'test_refresh_token'
     })
     USERINFO_RESPONSE = OpenIDSchema(**{'sub': 'test_sub'})
     ERROR_RESPONSE = {'error': 'test_error', 'error_description': 'something went wrong'}
@@ -66,6 +67,7 @@ class TestAuthResponseHandler:
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
+        assert result.refresh_token == self.TOKEN_RESPONSE['refresh_token']
 
     def test_should_handle_auth_response_without_authorization_code(self, client_mock):
         auth_response = AuthorizationResponse(**self.TOKEN_RESPONSE)
@@ -78,6 +80,7 @@ class TestAuthResponseHandler:
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
+        assert result.refresh_token == None
 
     def test_should_handle_token_response_without_id_token(self, client_mock):
         token_response = {'access_token': 'test_token'}

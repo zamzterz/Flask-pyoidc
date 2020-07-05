@@ -156,7 +156,8 @@ class OIDCAuthentication:
                                           expires_in=result.expires_in,
                                           id_token=result.id_token_claims,
                                           id_token_jwt=result.id_token_jwt,
-                                          userinfo=result.userinfo_claims)
+                                          userinfo=result.userinfo_claims,
+                                          refresh_token=result.refresh_token)
 
         destination = flask.session.pop('destination')
         if is_processing_fragment_encoded_response:
