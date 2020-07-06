@@ -19,7 +19,8 @@ class UserSession:
         'id_token_jwt',
         'last_authenticated',
         'last_session_refresh',
-        'userinfo'
+        'userinfo',
+        'refresh_token'
     ]
 
     def __init__(self, session_storage, provider_name=None):
@@ -52,7 +53,13 @@ class UserSession:
         last = self._session_storage.get('last_session_refresh', 0)
         return last + refresh_interval_seconds
 
-    def update(self, *, access_token=None, expires_in=None, id_token=None, id_token_jwt=None, userinfo=None):
+    def update(self, *,
+               access_token=None,
+               expires_in=None,
+               id_token=None,
+               id_token_jwt=None,
+               userinfo=None,
+               refresh_token=None):
         """
         Args:
             access_token (str)
@@ -78,6 +85,7 @@ class UserSession:
         set_if_defined('id_token', id_token)
         set_if_defined('id_token_jwt', id_token_jwt)
         set_if_defined('userinfo', userinfo)
+        set_if_defined('refresh_token', refresh_token)
 
     def clear(self):
         for key in self.KEYS:
@@ -90,6 +98,10 @@ class UserSession:
     @property
     def access_token_expires_at(self):
         return self._session_storage.get('access_token_expires_at')
+
+    @property
+    def refresh_token(self):
+        return self._session_storage.get('refresh_token')
 
     @property
     def id_token(self):

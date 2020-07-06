@@ -79,7 +79,12 @@ ClientRegistrationInfo(..., post_logout_redirect_uris=['https://example.com/post
 This extension also supports [RP-Initiated Logout](http://openid.net/specs/openid-connect-session-1_0.html#RPLogout),
 if the provider allows it. Make sure the `end_session_endpoint` is defined in the provider metadata to enable notifying
 the provider when the user logs out. 
-  
+
+## Refreshing the access token
+
+If the provider returns a refresh token, this extension can use it to automatically refresh the access token when it
+has expired. Please see the helper method `OIDCAuthentication.valid_access_token()`.
+
 ## Specify the error view
 
 If an OAuth error response is received, either in the authentication or token response, it will be passed to the
