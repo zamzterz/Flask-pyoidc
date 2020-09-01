@@ -130,6 +130,11 @@ class OIDCAuthentication:
         except UninitialisedSession:
             return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
 
+        if 'state' not in flask.session:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'state' stored."})
+        elif 'nonce' not in flask.session:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'nonce' stored."})
+
         if flask.session.pop('fragment_encoded_response', False):
             return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
 

@@ -304,11 +304,46 @@ class TestOIDCAuthentication(object):
             self.assert_view_mock(error_view_mock, result)
             error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
 
+    def test_handle_authentication_response_without_stored_state(self):
+        authn = self.init_app()
+
+        with self.app.test_request_context('/redirect_uri?state=test-state&code=test'):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/test'
+            flask.session['nonce'] = 'test_nonce'
+            response = authn._handle_authentication_response()
+            assert response == 'Something went wrong with the authentication, please try to login again.'
+
+            # with error view configured, error object should be sent to it instead
+            error_view_mock = self.get_view_mock()
+            authn.error_view(error_view_mock)
+            result = authn._handle_authentication_response()
+            self.assert_view_mock(error_view_mock, result)
+            error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': "No 'state' stored."})
+
+    def test_handle_authentication_response_without_stored_nonce(self):
+        authn = self.init_app()
+
+        with self.app.test_request_context('/redirect_uri?state=test-state&code=test'):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/test'
+            flask.session['state'] = 'test_state'
+            response = authn._handle_authentication_response()
+            assert response == 'Something went wrong with the authentication, please try to login again.'
+
+            # with error view configured, error object should be sent to it instead
+            error_view_mock = self.get_view_mock()
+            authn.error_view(error_view_mock)
+            result = authn._handle_authentication_response()
+            self.assert_view_mock(error_view_mock, result)
+            error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': "No 'nonce' stored."})
 
     def test_handle_authentication_response_fragment_encoded(self):
         authn = self.init_app()
         with self.app.test_request_context('/redirect_uri'):
             UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['state'] = 'test_state'
+            flask.session['nonce'] = 'test_nonce'
             flask.session['fragment_encoded_response'] = True
             response = authn._handle_authentication_response()
         assert response.startswith('<html>')
