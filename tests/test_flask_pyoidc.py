@@ -290,9 +290,25 @@ class TestOIDCAuthentication(object):
             assert session.access_token == access_token
             assert response == '/test'
 
+    def test_handle_authentication_response_without_initialised_session(self):
+        authn = self.init_app()
+
+        with self.app.test_request_context('/redirect_uri?state=test-state&code=test'):
+            response = authn._handle_authentication_response()
+            assert response == 'Something went wrong with the authentication, please try to login again.'
+
+            # with error view configured, error object should be sent to it instead
+            error_view_mock = self.get_view_mock()
+            authn.error_view(error_view_mock)
+            result = authn._handle_authentication_response()
+            self.assert_view_mock(error_view_mock, result)
+            error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
+
+
     def test_handle_authentication_response_fragment_encoded(self):
         authn = self.init_app()
         with self.app.test_request_context('/redirect_uri'):
+            UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['fragment_encoded_response'] = True
             response = authn._handle_authentication_response()
         assert response.startswith('<html>')
