@@ -125,6 +125,16 @@ class OIDCAuthentication:
                 return self._show_error_response(flask.session.pop('error'))
             return 'Something went wrong.'
 
+        try:
+            session = UserSession(flask.session)
+        except UninitialisedSession:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
+
+        if 'state' not in flask.session:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'state' stored."})
+        elif 'nonce' not in flask.session:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'nonce' stored."})
+
         if flask.session.pop('fragment_encoded_response', False):
             return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
 
@@ -135,7 +145,7 @@ class OIDCAuthentication:
         else:
             auth_resp = flask.request.args
 
-        client = self.clients[UserSession(flask.session).current_provider]
+        client = self.clients[session.current_provider]
 
         authn_resp = client.parse_authentication_response(auth_resp)
         logger.debug('received authentication response: %s', authn_resp.to_json())
