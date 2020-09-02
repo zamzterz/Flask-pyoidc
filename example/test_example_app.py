@@ -27,7 +27,7 @@ class TestExampleApp(object):
     }
     USER_ID = 'user1'
 
-    @pytest.fixture('session', autouse=True)
+    @pytest.fixture(scope='session', autouse=True)
     def setup(self):
         app.testing = True
 
