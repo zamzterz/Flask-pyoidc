@@ -40,25 +40,28 @@ class OIDCAuthentication:
     OIDCAuthentication object for Flask extension.
     """
 
-    def __init__(self, provider_configurations, app=None):
+    def __init__(self, provider_configurations, app=None, redirect_uri_config = None):
         """
         Args:
             provider_configurations (Mapping[str, ProviderConfiguration]):
                 provider configurations by name
             app (flask.app.Flask): optional Flask app
+            redirect_uri_config (RedirectUriConfig): optional redirect URI config to use instead of
+                'OIDC_REDIRECT_URI' config parameter.
         """
         self._provider_configurations = provider_configurations
 
         self.clients = None
         self._logout_view = None
         self._error_view = None
-        self._redirect_uri_config = None
+        self._redirect_uri_config = redirect_uri_config
 
         if app:
             self.init_app(app)
 
     def init_app(self, app):
-        self._redirect_uri_config = RedirectUriConfig(app.config)
+        if not self._redirect_uri_config:
+            self._redirect_uri_config = RedirectUriConfig.from_config(app.config)
 
         # setup redirect_uri as a flask route
         app.add_url_rule('/' + self._redirect_uri_config.endpoint,
