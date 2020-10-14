@@ -290,6 +290,24 @@ class TestOIDCAuthentication(object):
             assert session.access_token == access_token
             assert response == '/test'
 
+    def test_handle_error_response_POST(self):
+        state = 'test_state'
+
+        authn = self.init_app()
+        error_resp = {'state': state, 'error': 'invalid_request', 'error_description': 'test error'}
+
+        with self.app.test_request_context('/redirect_uri',
+                                           method='POST',
+                                           data=error_resp,
+                                           mimetype='application/x-www-form-urlencoded'):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['state'] = state
+            flask.session['nonce'] = 'test_nonce'
+            response = authn._handle_authentication_response()
+            assert flask.session['error'] == error_resp
+            assert response == '/redirect_uri?error=1'
+
+
     def test_handle_authentication_response_without_initialised_session(self):
         authn = self.init_app()
 
