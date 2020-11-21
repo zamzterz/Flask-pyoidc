@@ -65,9 +65,7 @@ class TestPyoidcFacade(object):
         facade = PyoidcFacade(config, REDIRECT_URI)
         extra_lib_auth_params = {'foo': 'baz', 'qwe': 'rty'}
         auth_request = facade.authentication_request(state, nonce, extra_lib_auth_params)
-        assert auth_request.startswith(self.PROVIDER_METADATA['authorization_endpoint'])
 
-        auth_request_params = dict(parse_qsl(urlparse(auth_request).query))
         expected_auth_params = {
             'scope': 'openid',
             'response_type': 'code',
@@ -78,7 +76,7 @@ class TestPyoidcFacade(object):
         }
         expected_auth_params.update(extra_user_auth_params)
         expected_auth_params.update(extra_lib_auth_params)
-        assert auth_request_params == expected_auth_params
+        assert auth_request.to_dict() == expected_auth_params
 
     def test_parse_authentication_response(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,

@@ -1,7 +1,7 @@
 import base64
 import json
-
 import logging
+
 from oic.oic import Client, RegistrationResponse, AuthorizationResponse, \
     AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse
 from oic.oic.message import ProviderConfigurationResponse
@@ -73,11 +73,12 @@ class PyoidcFacade:
     def authentication_request(self, state, nonce, extra_auth_params):
         """
 
-        :param state:
-        :param nonce:
-        :param extra_auth_params:
+        Args:
+            state (str): authentication request parameter 'state'
+            nonce (str): authentication request parameter 'nonce'
+            extra_auth_params (Mapping[str, str]): extra authentication request parameters
         Returns:
-            str: Authentication request as a URL to redirect the user to the provider.
+            AuthorizationRequest: the authentication request
         """
         args = {
             'client_id': self._client.client_id,
@@ -93,6 +94,15 @@ class PyoidcFacade:
         auth_request = self._client.construct_AuthorizationRequest(request_args=args)
         logger.debug('sending authentication request: %s', auth_request.to_json())
 
+        return auth_request
+
+    def login_url(self, auth_request):
+        """
+        Args:
+            auth_request (AuthorizationRequest): authenticatio request
+        Returns:
+            str: Authentication request as a URL to redirect the user to the provider.
+        """
         return auth_request.request(self._client.authorization_endpoint)
 
     def parse_authentication_response(self, response_params):
@@ -125,6 +135,21 @@ class PyoidcFacade:
         }
 
         return self._token_request(request)
+
+    def verify_id_token(self, id_token, auth_request):
+        """
+        Verifies the ID Token.
+
+        Args:
+            id_token (Mapping[str, str]): ID token claims
+            auth_request (Mapping[str, str]): original authentication request parameters to validate against
+                (nonce, acr_values, max_age, etc.)
+
+        Raises:
+            PyoidcError: If the ID token is invalid.
+
+        """
+        self._client.verify_id_token(id_token, auth_request)
 
     def refresh_token(self, refresh_token):
         """

@@ -1,6 +1,8 @@
 import collections
 import logging
 
+from oic.exception import PyoidcError
+
 logger = logging.getLogger(__name__)
 
 AuthenticationResult = collections.namedtuple('AuthenticationResult',
@@ -22,7 +24,7 @@ class AuthResponseUnexpectedStateError(AuthResponseProcessError):
     pass
 
 
-class AuthResponseUnexpectedNonceError(AuthResponseProcessError):
+class InvalidIdTokenError(AuthResponseProcessError):
     pass
 
 
@@ -47,19 +49,18 @@ class AuthResponseHandler:
         """
         self._client = client
 
-    def process_auth_response(self, auth_response, expected_state, expected_nonce=None):
+    def process_auth_response(self, auth_response, auth_request):
         """
         Args:
             auth_response (Union[AuthorizationResponse, AuthorizationErrorResponse]): parsed OIDC auth response
-            expected_state (str): state value included in the OIDC auth request
-            expected_nonce (str): nonce value included in the OIDC auth request
+            auth_request (Mapping[str, str]): original OIDC auth request
         Returns:
             AuthenticationResult: All relevant data associated with the authenticated user
         """
         if 'error' in auth_response:
             raise AuthResponseErrorResponseError(auth_response.to_dict())
 
-        if auth_response['state'] != expected_state:
+        if auth_response['state'] != auth_request['state']:
             raise AuthResponseUnexpectedStateError()
 
         # implicit/hybrid flow may return tokens in the auth response
@@ -83,8 +84,10 @@ class AuthResponseHandler:
                     id_token = token_resp['id_token']
                     logger.debug('received id token: %s', id_token.to_json())
 
-                    if id_token['nonce'] != expected_nonce:
-                        raise AuthResponseUnexpectedNonceError()
+                    try:
+                        self._client.verify_id_token(id_token, auth_request)
+                    except PyoidcError as e:
+                        raise InvalidIdTokenError(str(e))
 
                     id_token_claims = id_token.to_dict()
                     id_token_jwt = token_resp.get('id_token_jwt')
