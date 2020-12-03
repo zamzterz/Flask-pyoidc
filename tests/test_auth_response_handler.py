@@ -10,6 +10,12 @@ from oic.oic import AuthorizationResponse, AccessTokenResponse, IdToken, TokenEr
     OpenIDSchema, AuthorizationErrorResponse, AuthorizationRequest
 
 
+def _create_id_token(issuer, client_id, nonce):
+    id_token = IdToken(**{'iss': issuer, 'sub': 'test_sub', 'aud': client_id, 'nonce': nonce, 'exp': time() + 60})
+    id_token.jws_header = {'alg': 'RS256'}
+    return id_token
+
+
 class TestAuthResponseHandler:
     ISSUER = 'https://issuer.example.com'
     CLIENT_ID = 'client1'
@@ -18,7 +24,7 @@ class TestAuthResponseHandler:
     TOKEN_RESPONSE = AccessTokenResponse(**{
         'access_token': 'test_token',
         'expires_in': 3600,
-        'id_token': IdToken(**{'iss': ISSUER, 'sub': 'test_sub', 'aud': CLIENT_ID, 'nonce': AUTH_REQUEST['nonce'], 'exp': time() + 60}),
+        'id_token': _create_id_token(ISSUER, CLIENT_ID, AUTH_REQUEST['nonce']),
         'id_token_jwt': 'test_id_token_jwt',
         'refresh_token': 'test_refresh_token'
     })

@@ -397,7 +397,7 @@ class TestOIDCAuthentication(object):
             with client.session_transaction() as session:
                 UserSession(session, self.PROVIDER_NAME)
                 session['destination'] = '/'
-                session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
+                session['auth_request'] = json.dumps({'state': state, 'nonce': nonce, 'response_type': 'code'})
             resp = client.get('/redirect_uri?state={}&code=test'.format(state))
 
         cookies = SimpleCookie()
