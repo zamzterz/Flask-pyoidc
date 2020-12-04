@@ -24,6 +24,7 @@ import importlib_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
+from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.utils import redirect
 
@@ -40,7 +41,7 @@ class OIDCAuthentication:
     OIDCAuthentication object for Flask extension.
     """
 
-    def __init__(self, provider_configurations, app=None, redirect_uri_config = None):
+    def __init__(self, provider_configurations, app=None, redirect_uri_config=None):
         """
         Args:
             provider_configurations (Mapping[str, ProviderConfiguration]):
@@ -104,8 +105,6 @@ class OIDCAuthentication:
             self._register_client(client)
 
         flask.session['destination'] = flask.request.url
-        flask.session['state'] = rndstr()
-        flask.session['nonce'] = rndstr()
 
         # Use silent authentication for session refresh
         # This will not show login prompt to the user
@@ -113,9 +112,11 @@ class OIDCAuthentication:
         if not interactive:
             extra_auth_params['prompt'] = 'none'
 
-        login_url = client.authentication_request(flask.session['state'],
-                                                  flask.session['nonce'],
-                                                  extra_auth_params)
+        auth_req = client.authentication_request(state=rndstr(),
+                                                 nonce=rndstr(),
+                                                 extra_auth_params=extra_auth_params)
+        flask.session['auth_request'] = auth_req.to_json()
+        login_url = client.login_url(auth_req)
 
         auth_params = dict(parse_qsl(login_url.split('?')[1]))
         flask.session['fragment_encoded_response'] = AuthResponseHandler.expect_fragment_encoded_response(auth_params)
@@ -133,10 +134,9 @@ class OIDCAuthentication:
         except UninitialisedSession:
             return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
 
-        if 'state' not in flask.session:
-            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'state' stored."})
-        elif 'nonce' not in flask.session:
-            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': "No 'nonce' stored."})
+        if 'auth_request' not in flask.session:
+            return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No authentication request stored.'})
+        auth_request = AuthorizationRequest().from_json(flask.session.pop('auth_request'))
 
         if flask.session.pop('fragment_encoded_response', False):
             return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
@@ -154,9 +154,7 @@ class OIDCAuthentication:
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
         try:
-            result = AuthResponseHandler(client).process_auth_response(authn_resp,
-                                                                       flask.session.pop('state'),
-                                                                       flask.session.pop('nonce'))
+            result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request)
         except AuthResponseErrorResponseError as e:
             return self._handle_error_response(e.error_response, is_processing_fragment_encoded_response)
         except AuthResponseProcessError as e:
