@@ -14,7 +14,7 @@ matrix:
       env: TOXENV=py35
 
 install:
-  - pip install -U setuptools tox
+  - pip install -U setuptools tox pip
   - pip install -e .
   - pip install pytest-cov codecov -r tests/requirements.txt
 
