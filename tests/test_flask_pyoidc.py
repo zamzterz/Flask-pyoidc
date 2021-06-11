@@ -403,7 +403,7 @@ class TestOIDCAuthentication(object):
         cookies = SimpleCookie()
         cookies.load(resp.headers['Set-Cookie'])
         session_cookie_expiration = cookies[self.app.config['SESSION_COOKIE_NAME']]['expires']
-        parsed_expiration = datetime.strptime(session_cookie_expiration, '%a, %d-%b-%Y %H:%M:%S GMT')
+        parsed_expiration = datetime.strptime(session_cookie_expiration, '%a, %d %b %Y %H:%M:%S GMT')
         cookie_lifetime = (parsed_expiration - datetime.utcnow()).total_seconds()
         assert cookie_lifetime == pytest.approx(session_lifetime, abs=1)
 
