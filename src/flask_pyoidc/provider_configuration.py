@@ -58,6 +58,17 @@ class OIDCData(collections.MutableMapping):
 
 class ProviderMetadata(OIDCData):
     def __init__(self, issuer=None, authorization_endpoint=None, jwks_uri=None, **kwargs):
+        """
+        Args:
+            issuer (str): OP Issuer Identifier.
+            authorization_endpoint (str): URL of the OP's Authorization Endpoint
+            jwks_uri (str): URL of the OP's JSON Web Key Set
+            kwargs (dict): key-value pairs corresponding to
+                `OpenID Provider Metadata`_
+
+        .. _OpenID Provider Metadata:
+            https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+        """
         super(ProviderMetadata, self).__init__(issuer=issuer, authorization_endpoint=authorization_endpoint, jwks_uri=jwks_uri, **kwargs)
 
 
@@ -67,6 +78,13 @@ class ClientRegistrationInfo(OIDCData):
 
 class ClientMetadata(OIDCData):
     def __init__(self, client_id=None, client_secret=None, **kwargs):
+        """
+        Args:
+            client_id (str): client identifier representing the client
+            client_secret (str): client secret to authenticate the client with
+                the OP
+            kwargs (dict): key-value pairs
+        """
         super(ClientMetadata, self).__init__(client_id=client_id, client_secret=client_secret, **kwargs)
 
 
