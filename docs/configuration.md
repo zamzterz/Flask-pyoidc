@@ -25,12 +25,16 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderM
 
 provider_metadata = ProviderMetadata(issuer='https://op.example.com',
                                      authorization_endpoint='https://op.example.com/auth',
-                                     jwks_uri='https://op.example.com/jwks')
+                                     jwks_uri='https://op.example.com/jwks',
+                                     userinfo_endpoint='https://op.example.com/userinfo')
 config = ProviderConfiguration(provider_metadata=provider_metadata, [client configuration])
 ```
 
 See the OpenID Connect specification for more information about the
 [provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
+
+As mentioned in OpenID Connect specification, `userinfo_endpoint` is optional. If it's
+not provided, no userinfo request will be done and `flask_pyoidc.UserSession.userinfo` will be set to `None`.  
 
 #### Customizing authentication request parameters
 To customize the [authentication request parameters](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest),
