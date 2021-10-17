@@ -269,16 +269,25 @@ class TestOIDCAuthentication(object):
         state = 'test_state'
         auth_response = AuthorizationResponse(
             **{'state': state, 'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt})
-        with self.app.test_request_context('/redirect_uri?{}'.format(auth_response.to_urlencoded())):
-            UserSession(flask.session, self.PROVIDER_NAME)
-            flask.session['destination'] = '/'
-            flask.session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
-            authn._handle_authentication_response()
-            session = UserSession(flask.session)
-            assert session.access_token == access_token
-            assert session.id_token == id_token_claims
-            assert session.id_token_jwt == id_token_jwt
-            assert session.userinfo == userinfo
+
+        with self.app.test_client() as client:
+            with client.session_transaction() as session:
+                UserSession(session, self.PROVIDER_NAME)
+                session['destination'] = '/'
+                session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
+                session['fragment_encoded_response'] = True
+            client.get('/redirect_uri#{}'.format(auth_response.to_urlencoded()))
+            assert 'auth_request' in session  # stored auth_request should not have been removed yet
+
+            # fake the POST request from the 'parse_fragment.html' template
+            resp = client.post('/redirect_uri', data=auth_response.to_dict())
+            user_session = UserSession(flask.session)
+            assert user_session.access_token == access_token
+            assert user_session.id_token == id_token_claims
+            assert user_session.id_token_jwt == id_token_jwt
+            assert user_session.userinfo == userinfo
+            assert 'auth_request' not in flask.session  # stored auth_request should have been removed now
+            assert resp.data.decode('utf-8') == '/'  # final redirect back to the protected endpoint
 
     def test_handle_authentication_response_POST(self):
         access_token = 'test_access_token'
