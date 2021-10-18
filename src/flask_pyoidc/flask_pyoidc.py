@@ -134,15 +134,14 @@ class OIDCAuthentication:
         except UninitialisedSession:
             return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
 
+        if flask.session.pop('fragment_encoded_response', False):
+            return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
+
         if 'auth_request' not in flask.session:
             return self._handle_error_response({'error': 'unsolicited_response', 'error_description': 'No authentication request stored.'})
         auth_request = AuthorizationRequest().from_json(flask.session.pop('auth_request'))
 
-        if flask.session.pop('fragment_encoded_response', False):
-            return importlib_resources.read_binary('flask_pyoidc', 'parse_fragment.html').decode('utf-8')
-
         is_processing_fragment_encoded_response = flask.request.method == 'POST'
-
         if is_processing_fragment_encoded_response:
             auth_resp = flask.request.form
         else:
