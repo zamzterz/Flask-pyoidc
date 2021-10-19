@@ -4,7 +4,7 @@ sudo: false
 
 matrix:
   include:
-    - python: 3.10
+    - python: 3.10-dev
       env: TOXENV=py310
     - python: 3.9
       env: TOXENV=py39
