@@ -454,6 +454,26 @@ class TestOIDCAuthentication(object):
         assert parsed_request['post_logout_redirect_uri'] == expected_post_logout_redirect_uri
         assert not logout_view_mock.called
 
+    def test_logout_with_missing_end_session_state_fails_gracefully(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        authn = self.init_app(provider_metadata_extras={'end_session_endpoint': end_session_endpoint})
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+        logout_view_mock = self.get_view_mock()
+
+        # register logout view
+        view_func = authn.oidc_logout(logout_view_mock)
+        self.app.add_url_rule('/logout', view_func=view_func)
+
+        with self.app.test_request_context('/logout?state=incorrect'):
+            UserSession(flask.session, self.PROVIDER_NAME).update(access_token='test_access_token',
+                                                                  id_token=id_token.to_dict(),
+                                                                  id_token_jwt=id_token.to_jwt(),
+                                                                  userinfo={'sub': 'user1'})
+            flask.session.pop('end_session_state', None)  # make sure there's no 'end_session_state'
+            logout_result = authn.oidc_logout(logout_view_mock)()
+
+        self.assert_view_mock(logout_view_mock, logout_result)
+
     def test_logout_handles_provider_without_end_session_endpoint(self):
         authn = self.init_app()
         id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
