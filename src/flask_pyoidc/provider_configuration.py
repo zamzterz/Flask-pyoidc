@@ -1,4 +1,4 @@
-import collections
+import collections.abc
 import logging
 
 import requests
@@ -6,7 +6,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-class OIDCData(collections.MutableMapping):
+class OIDCData(collections.abc.MutableMapping):
     """
     Basic OIDC data representation providing validation of required fields.
     """
