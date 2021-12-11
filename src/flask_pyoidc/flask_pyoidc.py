@@ -27,6 +27,7 @@ from oic import rndstr
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.utils import redirect
+from werkzeug.routing import BuildError
 
 from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler, AuthResponseErrorResponseError
 from .pyoidc_facade import PyoidcFacade
@@ -82,7 +83,11 @@ class OIDCAuthentication:
         return self._get_url_for_logout_view()
 
     def _get_url_for_logout_view(self):
-        return url_for(self._logout_view.__name__, _external=True) if self._logout_view else None
+        if self._logout_view:
+            try:
+                return url_for(self._logout_view.__name__, _external=True)
+            except BuildError:
+                logger.info('logout view is mounted under a custom endpoint')
 
     def _register_client(self, client):
         def default_post_logout_redirect_uris():
