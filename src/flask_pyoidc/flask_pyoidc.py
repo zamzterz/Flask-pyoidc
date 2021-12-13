@@ -88,6 +88,7 @@ class OIDCAuthentication:
                 return url_for(self._logout_view.__name__, _external=True)
             except BuildError:
                 logger.info('logout view is mounted under a custom endpoint')
+                raise
 
     def _register_client(self, client):
         def default_post_logout_redirect_uris():
@@ -98,11 +99,11 @@ class OIDCAuthentication:
 
         client_registration_args = {}
         post_logout_redirect_uris = client._provider_configuration._client_registration_info.get(
-            'post_logout_redirect_uris',
-            default_post_logout_redirect_uris())
-        if post_logout_redirect_uris:
-            logger.debug('registering with post_logout_redirect_uris=%s', post_logout_redirect_uris)
-            client_registration_args['post_logout_redirect_uris'] = post_logout_redirect_uris
+            'post_logout_redirect_uris')
+        client_registration_args['post_logout_redirect_uris'] = (lambda post_logout: post_logout if post_logout
+                                                                 else default_post_logout_redirect_uris())(
+                                                                     post_logout_redirect_uris)
+        logger.debug('registering with post_logout_redirect_uris=%s', client_registration_args['post_logout_redirect_uris'])
         client.register(client_registration_args)
 
     def _authenticate(self, client, interactive=True):
