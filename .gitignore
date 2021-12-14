@@ -5,7 +5,7 @@ dist/
 .idea/
 .tox/
 .cache/
-.coverage
+.coverage*
 coverage.xml
 .pytest_cache
 .venv/

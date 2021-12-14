@@ -1,6 +1,11 @@
 [run]
 branch = True
-source = src/flask_pyoidc/
+source = src/flask_pyoidc
+
+[paths]
+source =
+    src/flask_pyoidc
+    */site-packages/flask_pyoidc
 
 [report]
 exclude_lines =
@@ -10,3 +15,5 @@ ignore_errors = True
 omit =
     tests/*
     setup.py
+show_missing = true
+precision = 2
