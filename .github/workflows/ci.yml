@@ -1,13 +1,13 @@
 name: CI
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [ main ]
   pull_request:
-    branches: [ $default-branch ]
+    branches: [ main ]
 
 jobs:
   tests:
-    name: "Python ${{ matrix.python-version }}"
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -18,10 +18,10 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: "${{ matrix.python-version }}"
-      - name: "Install dependencies"
-      - name: "Run tox targets for ${{ matrix.python-version }}"
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
         run: pip install -U setuptools tox tox-gh-actions pip virtualenv
+      - name: Run tox targets for ${{ matrix.python-version }}
         run: "python -m tox"
       - name: Upload coverage data
         uses: actions/upload-artifact@v2
