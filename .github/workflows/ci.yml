@@ -1,0 +1,28 @@
+name: CI
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+
+jobs:
+  tests:
+    name: "Python ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.6", "3.7", "3.8", "3.9", "3.10"]
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "${{ matrix.python-version }}"
+      - name: "Install dependencies"
+        run: |
+          pip install -U setuptools tox tox-gh-actions pip virtualenv
+          pip install -e .
+          pip install pytest-cov codecov -r tests/requirements.txt
+      - name: "Run tox targets for ${{ matrix.python-version }}"
+        run: "python -m tox"
