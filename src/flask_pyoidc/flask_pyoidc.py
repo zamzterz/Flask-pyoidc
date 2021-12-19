@@ -24,7 +24,7 @@ import importlib_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
-from oic.exception import AccessDenied, NotForMe
+from oic.exception import NotForMe
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.routing import BuildError
@@ -237,7 +237,7 @@ class OIDCAuthentication:
                 # passed access token in the request header and make
                 # introspection request to the identity provider to verify the
                 # token.
-                elif accept_token:
+                elif accept_token and self._check_authorization_header(flask.request):
                     if self.introspect_token(request=flask.request,
                                              client=client, scopes=scopes_required):
                         logger.info('user has valid access token')
@@ -343,30 +343,39 @@ class OIDCAuthentication:
                        refresh_token=response.get('refresh_token'))
         return access_token
 
-    def _parse_access_token(self, request):
-        '''Parse access token from the authorization request header
+    def _check_authorization_header(self, request) -> bool:
+         '''Look for authorization in request header.
+         
+         Parameters
+         ----------
+         request : werkzeug.local.LocalProxy
+             flask request object
+             
+         Returns
+         -------
+         bool
+             True if the request header contains authorization.
+         '''
+         if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
+             return True
 
-        Parameters
-        ----------
-        request : werkzeug.local.LocalProxy
-            flask request object
+    def _parse_access_token(self, request) -> str:
+         '''Parse access token from the authorization request header
+ 
+         Parameters
+         ----------
+         request : werkzeug.local.LocalProxy
+             flask request object
+ 
+         Returns
+         -------
+         accept_token : str
+             access token from the request header
+         '''
+         _, access_token = request.headers['Authorization'].split(maxsplit=1)
+         return access_token
 
-        Returns
-        -------
-        accept_token : str
-            access token from the request header
-
-        Raises
-        ------
-        AccessDenied
-            If the authorization error is missing
-        '''
-        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
-            _, access_token = request.headers['Authorization'].split(maxsplit=1)
-            return access_token
-        raise AccessDenied('missing authorization header')
-
-    def introspect_token(self, request, client, scopes: list = None):
+    def introspect_token(self, request, client, scopes: list = None) -> bool:
         '''RFC 7662: Token Introspection
         The Token Introspection extension defines a mechanism for resource
         servers to obtain information about access tokens. With this spec,
