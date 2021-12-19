@@ -295,25 +295,3 @@ class PyoidcFacade:
             response = success_response_cls(**response_params)
             response.verify(keyjar=self._client.keyjar)
         return response
-
-
-    @property
-    def session_refresh_interval_seconds(self):
-        return self._provider_configuration.session_refresh_interval_seconds
-
-    @property
-    def provider_end_session_endpoint(self):
-        provider_metadata = self._provider_configuration.ensure_provider_metadata()
-        return provider_metadata.get('end_session_endpoint')
-
-    @property
-    def post_logout_redirect_uris(self):
-        return self._client.registration_response.get('post_logout_redirect_uris')
-
-    def _parse_response(self, response_params, success_response_cls, error_response_cls):
-        if 'error' in response_params:
-            response = error_response_cls(**response_params)
-        else:
-            response = success_response_cls(**response_params)
-            response.verify(keyjar=self._client.keyjar)
-        return response
