@@ -24,6 +24,7 @@ import importlib_resources
 from flask import current_app
 from flask.helpers import url_for
 from oic import rndstr
+from oic.exception import AccessDenied, NotForMe
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.routing import BuildError
@@ -42,7 +43,8 @@ class OIDCAuthentication:
     OIDCAuthentication object for Flask extension.
     """
 
-    def __init__(self, provider_configurations, app=None, redirect_uri_config=None):
+    def __init__(self, provider_configurations, app=None, redirect_uri_config=None,
+                 access_token_required=False):
         """
         Args:
             provider_configurations (Mapping[str, ProviderConfiguration]):
@@ -57,6 +59,7 @@ class OIDCAuthentication:
         self._logout_view = None
         self._error_view = None
         self._redirect_uri_config = redirect_uri_config
+        self.access_token_required = access_token_required
 
         if app:
             self.init_app(app)
@@ -203,12 +206,20 @@ class OIDCAuthentication:
 
         return 'Something went wrong with the authentication, please try to login again.'
 
-    def oidc_auth(self, provider_name):
+    def oidc_auth(self, provider_name, accept_token: bool = None,
+                  scopes_required : list = None):
         if provider_name not in self._provider_configurations:
             raise ValueError(
                 "Provider name '{}' not in configured providers: {}.".format(provider_name,
                                                                              self._provider_configurations.keys())
             )
+        # If the user wants to enforce or disbale authorization on selective
+        # endpoints, it can be enforced by providing boolean to accept_token
+        # argument. If no boolean is explicitly provided, the value will be
+        # taken from self.access_token_required which enforces authorization
+        # globally and is False by default.
+        if accept_token is None:
+            accept_token = self.access_token_required
 
         def oidc_decorator(view_func):
             @functools.wraps(view_func)
@@ -222,6 +233,18 @@ class OIDCAuthentication:
                 elif session.is_authenticated():
                     logger.debug('user is already authenticated')
                     return view_func(*args, **kwargs)
+                # If the user is not authenticated, check if the user has
+                # passed access token in the request header and make
+                # introspection request to the identity provider to verify the
+                # token.
+                elif accept_token:
+                    if self.introspect_token(request=flask.request,
+                                             client=client, scopes=scopes_required):
+                        logger.info('user has valid access token')
+                        return view_func(*args, **kwargs)
+                    # Forbid access if the access token is invalid.
+                    flask.abort(403)
+                # Else authenticate the user using Authorization Code Flow
                 else:
                     logger.debug('user not authenticated, start flow')
                     return self._authenticate(client)
@@ -319,3 +342,91 @@ class OIDCAuthentication:
                        id_token_jwt=response.get('id_token_jwt'),
                        refresh_token=response.get('refresh_token'))
         return access_token
+
+    def _parse_access_token(self, request):
+        '''Parse access token from the authorization request header
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object
+
+        Returns
+        -------
+        accept_token : str
+            access token from the request header
+
+        Raises
+        ------
+        AccessDenied
+            If the authorization error is missing
+        '''
+        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
+            _, access_token = request.headers['Authorization'].split(maxsplit=1)
+            return access_token
+        raise AccessDenied('missing authorization header')
+
+    def introspect_token(self, request, client, scopes: list = None):
+        '''RFC 7662: Token Introspection
+        The Token Introspection extension defines a mechanism for resource
+        servers to obtain information about access tokens. With this spec,
+        resource servers can check the validity of access tokens, and find out
+        other information such as which user and which scopes are associated
+        with the token.
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object
+        client : flask_pyoidc.pyoidc_facade.PyoidcFacade
+            PyoidcFacdae object contains metadata of the provider and client
+        scopes : list
+            Specify scopes that are bound for the end endpoint
+
+        Returns
+        -------
+        bool
+            True if access_token is valid
+        None
+            if access_token is invalid
+
+        Raises
+        ------
+        NotForMe
+            if access_token is valid
+            
+        How To Use?
+        -----------
+        Enable token introspection globally by provding access_token_required to
+        True as an argument.
+        >>>> auth = OIDCAuthentication({'default': provider_config},
+                                       access_token_required=True)
+
+        >>>> # You can also enable or disable it per API endpoint from the decorator by
+        # providing accept_token to either True or False as an argument. It has
+        # higher precedence than global argument.
+
+        >>>> @auth.oidc_auth('default', accept_token=True)
+        >>>> # Additionally, you can provide required scopes for your endpoint.
+        >>>> @auth.oidc_auth('default', accept_token=True, scopes=['read', 'write'])
+        '''
+        received_access_token = self._parse_access_token(request)
+        # send token introspection request
+        result = client._token_introspection_request(
+            access_token=received_access_token)
+        logger.debug(result)
+        # Check if access_token is valid, active can be True or False
+        if result.get('active'):
+            # Check if client_id is in audience claim
+            if not client._client.client_id in result['aud']:
+                logger.info('Token is valid but required audience is missing')
+                # raises exception if client_id is not in audience, you can
+                # configure audience from Identity Provider
+                raise NotForMe('required audience is missing')
+            # Check if scopes associated with the access_token are the ones
+            # given by the user and not something else which is not permitted.
+            if scopes is not None:
+                if not set(scopes).issubset(set(result['scope'].split())):
+                    logger.info('Token is valid but does not have required scopes')
+                    raise NotForMe('Token does not have required scopes')
+            return True
