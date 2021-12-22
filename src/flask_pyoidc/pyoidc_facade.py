@@ -252,13 +252,13 @@ class PyoidcFacade:
             endpoint=self._client.introspection_endpoint)
 
     def client_credentials_grant(self):
-        '''Public method to request access_token using client_credentials
-        (previously known as application in OpenApi2.0) flow. This is useful
-        for service to service communication where user-agent is not available
-        which is required in authorization code flow. Your service can request
-        access_token on startup and can advertise it to other services using a
-        secure channel which can be used to access APIs of your services. How
-        do you share the access_token is outside of the scope of this feature.
+        '''Public method to request access_token using client_credentials flow.
+        This is useful for service to service communication where user-agent is
+        not available which is required in authorization code flow. Your
+        service can request access_token on startup and can advertise it to
+        other services using a secure channel which can be used to access APIs
+        of your services. How do you share the access_token is outside of the
+        scope of this feature.
 
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
@@ -270,10 +270,10 @@ class PyoidcFacade:
         >>>> auth.init_app(app)
         >>>> auth.clients['default'].client_credentials_grant()
         '''
-        client_credentilas_payload = {
+        client_credentials_payload = {
             'grant_type': 'client_credentials'
         }
-        return self._token_request(request=client_credentilas_payload)
+        return self._token_request(request=client_credentials_payload)
 
     @property
     def session_refresh_interval_seconds(self):
