@@ -344,37 +344,37 @@ class OIDCAuthentication:
         return access_token
 
     def _check_authorization_header(self, request) -> bool:
-         '''Look for authorization in request header.
+        '''Look for authorization in request header.
 
-         Parameters
-         ----------
-         request : werkzeug.local.LocalProxy
-             flask request object.
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object.
 
-         Returns
-         -------
-         bool
-             True if the request header contains authorization else False.
-         '''
-         if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
-             return True
-         return False
+        Returns
+        -------
+        bool
+            True if the request header contains authorization else False.
+        '''
+        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
+            return True
+        return False
 
     def _parse_access_token(self, request) -> str:
-         '''Parse access token from the authorization request header.
- 
-         Parameters
-         ----------
-         request : werkzeug.local.LocalProxy
-             flask request object.
- 
-         Returns
-         -------
-         accept_token : str
-             access token from the request header.
-         '''
-         _, access_token = request.headers['Authorization'].split(maxsplit=1)
-         return access_token
+        '''Parse access token from the authorization request header.
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object.
+
+        Returns
+        -------
+        accept_token : str
+            access token from the request header.
+        '''
+        _, access_token = request.headers['Authorization'].split(maxsplit=1)
+        return access_token
 
     def introspect_token(self, request, client, scopes: list = None) -> bool:
         '''RFC 7662: Token Introspection
@@ -435,8 +435,7 @@ class OIDCAuthentication:
             raise NotForMe('required audience is missing')
         # Check if scopes associated with the access_token are the ones
         # given by the user and not something else which is not permitted.
-        if not scopes and not set(scopes).issubset(
-                 set(result['scope'].split())):
-                logger.info('Token is valid but does not have required scopes')
-                raise NotForMe('Token does not have required scopes')
+        if scopes and not set(scopes).issubset(set(result['scope'])):
+            logger.info('Token is valid but does not have required scopes')
+            raise NotForMe('Token does not have required scopes')
         return True
