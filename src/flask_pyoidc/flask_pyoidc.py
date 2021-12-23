@@ -345,32 +345,33 @@ class OIDCAuthentication:
 
     def _check_authorization_header(self, request) -> bool:
          '''Look for authorization in request header.
-         
+
          Parameters
          ----------
          request : werkzeug.local.LocalProxy
-             flask request object
-             
+             flask request object.
+
          Returns
          -------
          bool
-             True if the request header contains authorization.
+             True if the request header contains authorization else False.
          '''
          if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
              return True
+         return False
 
     def _parse_access_token(self, request) -> str:
-         '''Parse access token from the authorization request header
+         '''Parse access token from the authorization request header.
  
          Parameters
          ----------
          request : werkzeug.local.LocalProxy
-             flask request object
+             flask request object.
  
          Returns
          -------
          accept_token : str
-             access token from the request header
+             access token from the request header.
          '''
          _, access_token = request.headers['Authorization'].split(maxsplit=1)
          return access_token
@@ -386,38 +387,37 @@ class OIDCAuthentication:
         Parameters
         ----------
         request : werkzeug.local.LocalProxy
-            flask request object
+            flask request object.
         client : flask_pyoidc.pyoidc_facade.PyoidcFacade
-            PyoidcFacdae object contains metadata of the provider and client
+            PyoidcFacdae object contains metadata of the provider and client.
         scopes : list
-            Specify scopes that are bound for the end endpoint
+            Specify scopes that are bound for the end endpoint.
 
         Returns
         -------
         bool
-            True if access_token is valid
-        None
-            if access_token is invalid
+            True if access_token is valid else False.
 
         Raises
         ------
         NotForMe
-            if access_token is valid
-            
-        How To Use?
-        -----------
-        Enable token introspection globally by provding access_token_required to
-        True as an argument.
-        >>>> auth = OIDCAuthentication({'default': provider_config},
-                                       access_token_required=True)
+            if access_token is invalid.
 
-        >>>> # You can also enable or disable it per API endpoint from the decorator by
-        # providing accept_token to either True or False as an argument. It has
-        # higher precedence than global argument.
+        How To Use
+        ----------
+        Enable token introspection globally by provding access_token_required
+        to True as an argument.
+        >>> auth = OIDCAuthentication({'default': provider_config},
+                                      access_token_required=True)
 
-        >>>> @auth.oidc_auth('default', accept_token=True)
-        >>>> # Additionally, you can provide required scopes for your endpoint.
-        >>>> @auth.oidc_auth('default', accept_token=True, scopes=['read', 'write'])
+        >>> # You can also enable or disable it per API endpoint from the
+        # decorator by providing accept_token to either True or False as an
+        # argument. It has higher precedence than global argument.
+
+        >>> @auth.oidc_auth('default', accept_token=True)
+        >>> # Additionally, you can provide required scopes for your endpoint.
+        >>> @auth.oidc_auth('default', accept_token=True,
+                            scopes=['read', 'write'])
         '''
         received_access_token = self._parse_access_token(request)
         # send token introspection request
@@ -425,17 +425,18 @@ class OIDCAuthentication:
             access_token=received_access_token)
         logger.debug(result)
         # Check if access_token is valid, active can be True or False
-        if result.get('active'):
-            # Check if client_id is in audience claim
-            if not client._client.client_id in result['aud']:
-                logger.info('Token is valid but required audience is missing')
-                # raises exception if client_id is not in audience, you can
-                # configure audience from Identity Provider
-                raise NotForMe('required audience is missing')
-            # Check if scopes associated with the access_token are the ones
-            # given by the user and not something else which is not permitted.
-            if scopes is not None:
-                if not set(scopes).issubset(set(result['scope'].split())):
-                    logger.info('Token is valid but does not have required scopes')
-                    raise NotForMe('Token does not have required scopes')
-            return True
+        if not result.get('active'):
+            return False
+        # Check if client_id is in audience claim
+        if not client._client.client_id in result['aud']:
+            logger.info('Token is valid but required audience is missing')
+            # raises exception if client_id is not in audience, you can
+            # configure audience from Identity Provider
+            raise NotForMe('required audience is missing')
+        # Check if scopes associated with the access_token are the ones
+        # given by the user and not something else which is not permitted.
+        if not scopes and not set(scopes).issubset(
+                 set(result['scope'].split())):
+                logger.info('Token is valid but does not have required scopes')
+                raise NotForMe('Token does not have required scopes')
+        return True
