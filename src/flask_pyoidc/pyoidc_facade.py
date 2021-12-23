@@ -226,7 +226,7 @@ class PyoidcFacade:
         return userinfo_response
 
     def _token_introspection_request(self, access_token: str):
-        '''Make token introspection request
+        '''Make token introspection request.
 
         Parameters
         ----------
@@ -236,7 +236,7 @@ class PyoidcFacade:
         Returns
         -------
         oic.extension.message.TokenIntrospectionResponse
-            Response object contains result of the token introspection
+            Response object contains result of the token introspection.
         '''
         args = {
             'token': access_token,
@@ -263,12 +263,12 @@ class PyoidcFacade:
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
         
-        How To Use?
-        -----------
-        >>>> auth = OIDCAuthentication({'default': provider_config},
+        How To Use
+        ----------
+        >>> auth = OIDCAuthentication({'default': provider_config},
                                        access_token_required=True)
-        >>>> auth.init_app(app)
-        >>>> auth.clients['default'].client_credentials_grant()
+        >>> auth.init_app(app)
+        >>> auth.clients['default'].client_credentials_grant()
         '''
         client_credentials_payload = {
             'grant_type': 'client_credentials'
