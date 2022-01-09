@@ -368,7 +368,7 @@ class OIDCAuthentication:
         return access_token
 
     def introspect_token(self, request, client, scopes: list = None) -> Union[
-            TokenIntrospectionResponse, False]:
+            TokenIntrospectionResponse, bool]:
         '''RFC 7662: Token Introspection
         The Token Introspection extension defines a mechanism for resource
         servers to obtain information about access tokens. With this spec,
