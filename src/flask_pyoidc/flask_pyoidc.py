@@ -65,8 +65,8 @@ class OIDCAuthentication:
         # the request. It is available until current request only and is
         # destroyed between the request. The value is set by token_auth
         # decorator.
-        self.current_identity = LocalProxy(lambda: getattr(_app_ctx_stack.top,
-                                                           'current_identity',
+        self.current_token_identity = LocalProxy(lambda: getattr(_app_ctx_stack.top,
+                                                           'current_token_identity',
                                                            None))
         self._redirect_uri_config = redirect_uri_config
 
@@ -465,7 +465,7 @@ class OIDCAuthentication:
                     logger.info('user has valid access token')
                     # Store token introspection info within the application
                     # context.
-                    _app_ctx_stack.top.current_identity = token_introspection_result.to_dict()
+                    _app_ctx_stack.top.current_token_identity = token_introspection_result.to_dict()
                     return view_func(*args, **kwargs)
                 # Forbid access if the access token is invalid.
                 flask.abort(403)
