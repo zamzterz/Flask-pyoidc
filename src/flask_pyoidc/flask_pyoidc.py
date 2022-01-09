@@ -17,18 +17,19 @@ import functools
 import json
 import logging
 import time
+from typing import Union
 from urllib.parse import parse_qsl
 
 import flask
 import importlib_resources
-from flask import current_app, g
+from flask import _app_ctx_stack, current_app
 from flask.helpers import url_for
 from oic import rndstr
-from oic.exception import AccessDenied, NotForMe
 from oic.extension.message import TokenIntrospectionResponse
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.exceptions import HTTPException
+from werkzeug.local import LocalProxy
 from werkzeug.routing import BuildError
 from werkzeug.utils import redirect
 
@@ -46,8 +47,7 @@ class OIDCAuthentication:
     """
 
     def __init__(self, provider_configurations, app=None,
-                 redirect_uri_config=None,
-                 disable_authorization=False):
+                 redirect_uri_config=None):
         """
         Args:
             provider_configurations (Mapping[str, ProviderConfiguration]):
@@ -61,14 +61,14 @@ class OIDCAuthentication:
         self.clients = None
         self._logout_view = None
         self._error_view = None
+        # current_identity proxy to obtain user info whose token was passed in
+        # the request. It is available until current request only and is
+        # destroyed between the request. The value is set by token_auth
+        # decorator.
+        self.current_identity = LocalProxy(lambda: getattr(_app_ctx_stack.top,
+                                                           'current_identity',
+                                                           None))
         self._redirect_uri_config = redirect_uri_config
-        # This is a lazy way to disable authorization globally. If
-        # self.disable_authorization is set to True, it disables authorization
-        # for all API endpoints that are decorated with @oidc_and_token_auth
-        # and is False by default. This is helpful when you want to deprecate
-        # developer access to your APIs that work with both oidc and token
-        # authorization.
-        self.disable_authorization = disable_authorization
 
         if app:
             self.init_app(app)
@@ -350,7 +350,6 @@ class OIDCAuthentication:
         '''
         if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
             return True
-        logger.info('missing authorization field')
         return False
 
     def _parse_access_token(self, request) -> str:
@@ -369,7 +368,8 @@ class OIDCAuthentication:
         _, access_token = request.headers['Authorization'].split(maxsplit=1)
         return access_token
 
-    def introspect_token(self, request, client, scopes: list = None) -> TokenIntrospectionResponse:
+    def introspect_token(self, request, client, scopes: list = None) -> Union[
+            TokenIntrospectionResponse, False]:
         '''RFC 7662: Token Introspection
         The Token Introspection extension defines a mechanism for resource
         servers to obtain information about access tokens. With this spec,
@@ -407,15 +407,16 @@ class OIDCAuthentication:
             return False
         # Check if client_id is in audience claim
         if not client._client.client_id in result['aud']:
+            # log the exception if client_id is not in audience and returns
+            # False, you can configure audience with Identity Provider
             logger.info('Token is valid but required audience is missing')
-            # raises exception if client_id is not in audience, you can
-            # configure audience from Identity Provider
-            raise NotForMe('required audience is missing')
-        # Check if scopes associated with the access_token are the ones
-        # given by the user and not something else which is not permitted.
+            return False
+        # Check if the scopes associated with the access_token are the ones
+        # required by the endpoint and not something else which is not
+        # permitted.
         if scopes and not set(scopes).issubset(set(result['scope'])):
             logger.info('Token is valid but does not have required scopes')
-            raise NotForMe('Token does not have required scopes')
+            return False
         return result
 
     def token_auth(self, provider_name, scopes_required: list = None):
@@ -430,15 +431,14 @@ class OIDCAuthentication:
 
         Raises
         ------
-        AccessDenied
+        flask.abort(401)
             If authorization field is missing.
-        HTTPException
+        flask.abort(403)
             If the access token is invalid.
 
         How To Use
         ----------
-        >>> auth = OIDCAuthentication({'default': provider_config},
-                                      disable_authorization=False)
+        >>> auth = OIDCAuthentication({'default': provider_config})
         >>> @app.route('/')
             @auth.token_auth(provider_name='default')
             def index():
@@ -455,7 +455,9 @@ class OIDCAuthentication:
                 client = self.clients[provider_name]
                 # Check for authorization field in the request header.
                 if not self._check_authorization_header(flask.request):
-                    raise AccessDenied('missing authorization field')
+                    logger.info('Request header has no authorization field')
+                    # Abort the request if authorization field is missing.
+                    flask.abort(401)
                 token_introspection_result = self.introspect_token(
                     request=flask.request, client=client,
                     scopes=scopes_required)
@@ -463,10 +465,10 @@ class OIDCAuthentication:
                     logger.info('user has valid access token')
                     # Store token introspection info within the application
                     # context.
-                    g._token_introspection_info = token_introspection_result.to_dict()
+                    _app_ctx_stack.top.current_identity = token_introspection_result.to_dict()
                     return view_func(*args, **kwargs)
                 # Forbid access if the access token is invalid.
-                flask.abort(401)
+                flask.abort(403)
 
             return wrapper
 
@@ -493,8 +495,7 @@ class OIDCAuthentication:
 
         How To Use
         ----------
-        >>> auth = OIDCAuthentication({'default': provider_config},
-                                      disable_authorization=False)
+        >>> auth = OIDCAuthentication({'default': provider_config})
         >>> @app.route('/')
             @auth.access_control(provider_name='default')
             def index():
@@ -502,13 +503,8 @@ class OIDCAuthentication:
         >>> # You can also specify scopes required by your endpoint.
         >>> @auth.access_control(provider_name='default',
                                  scopes_required=['read', 'write'])
-        >>> # Additionally, you can disable token authorization entirely by
-            # setting disable_authorization to True. It is helpful when you
-            # want to deprecate developer access to your APIs.
-        >>> auth = OIDCAuthentication({'default': provider_config},
-                                      disable_authorization=True)
         '''
-        def combined_decorator(view_func):
+        def hybrid_decorator(view_func):
 
             fallback_to_oidc = self.oidc_auth(provider_name)(view_func)
 
@@ -516,23 +512,31 @@ class OIDCAuthentication:
             def wrapper(*args, **kwargs):
 
                 try:
-                    if self.disable_authorization:
-                        logger.info('Authorization is disabled, this endpoint can use OIDC only')
-                        flask.abort(403)
-                    return self.token_auth(provider_name,
-                                           scopes_required)(
-                                               view_func)(*args, **kwargs)
+                    # Check if the request contains cookies. It's possible that
+                    # a request contains both token and cookies. If it does
+                    # then instead of checking for token, let oidc_auth handles
+                    # the request because cookies are not usually sent by the
+                    # rest api client. If cookies are present that means
+                    # there's some user-agent (browser) involved which should
+                    # be handled by oidc_auth.
+                    if not flask.request.cookies:
+                        return self.token_auth(provider_name,
+                                               scopes_required)(view_func)(
+                                                   *args, **kwargs)
+                    return fallback_to_oidc(*args, **kwargs)
                 except HTTPException as ex:
+                    # token_auth will raise the HTTPException if either
+                    # authorization field is missing from the request header or
+                    # token is invalid. If the authorization field is missing,
+                    # fallback to oidc.
                     logger.debug(ex.code)
-                    if ex.code == 401:
-                        flask.abort(401)
+                    if ex.code == 403:
+                        # If token is present but it's invalid, do not fallback
+                        # to oidc_auth. Instead, abort the request.
+                        flask.abort(403)
                     return fallback_to_oidc(*args, **kwargs)
-                except AccessDenied:
-                    return fallback_to_oidc(*args, **kwargs)
-                except NotForMe as ex:
-                    flask.abort(403, ex.args)
 
             return wrapper
 
-        return combined_decorator
+        return hybrid_decorator
 
