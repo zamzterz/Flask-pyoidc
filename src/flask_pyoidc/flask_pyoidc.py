@@ -61,13 +61,12 @@ class OIDCAuthentication:
         self.clients = None
         self._logout_view = None
         self._error_view = None
-        # current_identity proxy to obtain user info whose token was passed in
-        # the request. It is available until current request only and is
-        # destroyed between the request. The value is set by token_auth
+        # current_token_identity proxy to obtain user info whose token was
+        # passed in the request. It is available until current request only and
+        # is destroyed between the requests. The value is set by token_auth
         # decorator.
-        self.current_token_identity = LocalProxy(lambda: getattr(_app_ctx_stack.top,
-                                                           'current_token_identity',
-                                                           None))
+        self.current_token_identity = LocalProxy(lambda: getattr(
+            _app_ctx_stack.top, 'current_token_identity', None))
         self._redirect_uri_config = redirect_uri_config
 
         if app:
