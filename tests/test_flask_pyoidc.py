@@ -1,5 +1,6 @@
 import json
 import logging
+import unittest
 
 import flask
 import pytest
@@ -14,6 +15,7 @@ from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
+from werkzeug.exceptions import HTTPException
 
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
@@ -22,7 +24,7 @@ from flask_pyoidc.user_session import UserSession
 from .util import signed_id_token
 
 
-class TestOIDCAuthentication(object):
+class TestOIDCAuthentication(unittest.TestCase):
     PROVIDER_BASEURL = 'https://op.example.com'
     PROVIDER_NAME = 'test_provider'
     CLIENT_ID = 'client1'
@@ -674,3 +676,221 @@ class TestOIDCAuthentication(object):
             session.update(access_token=access_token, expires_in=-10, refresh_token='refresh-token')
             assert authn.valid_access_token(force_refresh=True) is None
             assert session.access_token == access_token
+
+    def test_should_check_for_authorization_header(self):
+
+        authn = self.init_app()
+        with self.app.test_request_context('/'):
+            self.assertFalse(authn._check_authorization_header(flask.request))
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            self.assertTrue(authn._check_authorization_header(flask.request))
+
+    def test_should_parse_access_token_from_request_header(self):
+
+        authn = self.init_app()
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            self.assertEqual(authn._parse_access_token(flask.request),
+                             'access_token')
+
+    @responses.activate
+    def test_introspect_token_should_return_False_if_invalid_access_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            responses.add(responses.POST, introspection_endpoint,
+                          json={'active': False})
+            self.assertFalse(authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME]))
+
+    @responses.activate
+    def test_introspect_token_should_return_False_if_client_id_not_in_audience(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            token_introspection_response = {
+                'active': True,
+                'aud': ['admin', 'user']
+            }
+            responses.add(responses.POST, introspection_endpoint,
+                          json=token_introspection_response)
+            self.assertFalse(authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME]))
+
+    @responses.activate
+    def test_introspect_token_should_return_False_if_required_scopes_not_permitted(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            token_introspection_response = {
+                'active': True,
+                'aud': ['admin', 'user', self.CLIENT_ID],
+                'scope': ['read', 'write']
+            }
+            responses.add(responses.POST, introspection_endpoint,
+                          json=token_introspection_response)
+            self.assertFalse(authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME],
+                scopes=['read', 'write', 'delete']))
+
+    @responses.activate
+    def test_introspect_token_should_return_introspection_result_if_valid_access_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            token_introspection_response = {
+                'active': True,
+                'aud': ['admin', 'user', self.CLIENT_ID],
+                'scope': 'read write delete',
+                'client_id': 'watchdogs'
+            }
+            responses.add(responses.POST, introspection_endpoint,
+                          json=token_introspection_response)
+            introspection_result = authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME])
+            self.assertEqual(token_introspection_response,
+                             introspection_result.to_dict())
+
+    def test_token_auth_should_abort_request_if_authorization_missing(self):
+
+        authn = self.init_app()
+        view_mock = self.get_view_mock()
+        with self.app.test_request_context('/'):
+            self.assertRaises(HTTPException, authn.token_auth(
+                self.PROVIDER_NAME)(view_mock))
+
+    @responses.activate
+    def test_token_auth_should_run_view_function_if_valid_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        view_mock = self.get_view_mock()
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        token_introspection_response = {
+            'active': True,
+            'aud': ['admin', 'user', self.CLIENT_ID],
+            'scope': 'read write delete',
+            'client_id': 'watchdogs'
+        }
+        responses.add(responses.POST, introspection_endpoint,
+                      json=token_introspection_response)
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            authn.token_auth(self.PROVIDER_NAME,
+                             scopes_required=['read', 'write'])(view_mock)()
+            assert view_mock.called
+            self.assertEqual(flask._app_ctx_stack.top.current_token_identity,
+                             token_introspection_response)
+
+    @responses.activate
+    def test_token_auth_should_abort_request_if_invalid_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        view_mock = self.get_view_mock()
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        token_introspection_response = {
+            'active': False,
+            'aud': ['admin', 'user', self.CLIENT_ID],
+            'scope': 'read write delete',
+            'client_id': 'watchdogs'
+        }
+        responses.add(responses.POST, introspection_endpoint,
+                      json=token_introspection_response)
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            self.assertRaises(HTTPException, authn.token_auth(
+                self.PROVIDER_NAME,
+                scopes_required=['read', 'write'])(view_mock))
+
+    @responses.activate
+    def test_access_control_should_fallback_to_oidc_auth_on_401(self):
+
+        authn = self.init_app()
+        view_mock = self.get_view_mock()
+        with self.app.test_request_context('/'):
+            auth_fallback = authn.access_control(
+                self.PROVIDER_NAME)(view_mock)()
+            self.assert_auth_redirect(auth_fallback)
+            assert not view_mock.called
+
+    @responses.activate
+    def test_access_control_should_abort_request_if_invalid_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        view_mock = self.get_view_mock()
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        token_introspection_response = {
+            'active': False,
+            'aud': ['admin', 'user', self.CLIENT_ID],
+            'scope': 'read write delete',
+            'client_id': 'watchdogs'
+        }
+        responses.add(responses.POST, introspection_endpoint,
+                      json=token_introspection_response)
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            self.assertRaises(HTTPException, authn.access_control(
+                self.PROVIDER_NAME,
+                scopes_required=['read', 'write'])(view_mock))
+
+    @responses.activate
+    def test_access_control_should_run_view_function_if_valid_token(self):
+
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        authn = self.init_app(provider_metadata_extras={
+            'introspection_endpoint': introspection_endpoint})
+        view_mock = self.get_view_mock()
+        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
+        token_introspection_response = {
+            'active': True,
+            'aud': ['admin', 'user', self.CLIENT_ID],
+            'scope': 'read write delete',
+            'client_id': 'watchdogs'
+        }
+        responses.add(responses.POST, introspection_endpoint,
+                      json=token_introspection_response)
+        with self.app.test_request_context('/'):
+            flask.request.headers = {
+                'Authorization': 'Bearer access_token'
+            }
+            authn.access_control(
+                self.PROVIDER_NAME,
+                scopes_required=['read', 'write'])(view_mock)()
+            assert view_mock.called
+            self.assertEqual(flask._app_ctx_stack.top.current_token_identity,
+                             token_introspection_response)

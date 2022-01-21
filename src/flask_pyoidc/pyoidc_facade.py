@@ -51,7 +51,7 @@ class PyoidcFacade:
         """
         self._provider_configuration = provider_configuration
         self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
-        # Token Introspection is implmented in extension sub-package of the
+        # Token Introspection is implemented in extension sub-package of the
         # client in pyoidc
         self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
 
@@ -226,7 +226,7 @@ class PyoidcFacade:
         return userinfo_response
 
     def _token_introspection_request(self, access_token: str):
-        '''Make token introspection request.
+        """Make token introspection request.
 
         Parameters
         ----------
@@ -237,7 +237,7 @@ class PyoidcFacade:
         -------
         oic.extension.message.TokenIntrospectionResponse
             Response object contains result of the token introspection.
-        '''
+        """
         args = {
             'token': access_token,
             'client_id': self._client.client_id,
@@ -252,13 +252,11 @@ class PyoidcFacade:
             endpoint=self._client.introspection_endpoint)
 
     def client_credentials_grant(self):
-        '''Public method to request access_token using client_credentials flow.
+        """Public method to request access_token using client_credentials flow.
         This is useful for service to service communication where user-agent is
         not available which is required in authorization code flow. Your
-        service can request access_token on startup and can advertise it to
-        other services using a secure channel which can be used to access APIs
-        of your services. How do you share the access_token is outside of the
-        scope of this feature.
+        service can request access_token in order to access APIs of other
+        services.
 
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
@@ -269,7 +267,7 @@ class PyoidcFacade:
                                       access_token_required=True)
         >>> auth.init_app(app)
         >>> auth.clients['default'].client_credentials_grant()
-        '''
+        """
         client_credentials_payload = {
             'grant_type': 'client_credentials'
             }
