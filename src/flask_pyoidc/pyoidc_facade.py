@@ -270,7 +270,7 @@ class PyoidcFacade:
         """
         client_credentials_payload = {
             'grant_type': 'client_credentials'
-            }
+        }
         return self._token_request(request=client_credentials_payload)
 
     @property

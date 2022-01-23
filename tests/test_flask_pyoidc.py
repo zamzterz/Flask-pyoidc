@@ -1,6 +1,5 @@
 import json
 import logging
-import unittest
 
 import flask
 import pytest
@@ -15,7 +14,7 @@ from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import Forbidden, Unauthorized
 
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
@@ -24,7 +23,7 @@ from flask_pyoidc.user_session import UserSession
 from .util import signed_id_token
 
 
-class TestOIDCAuthentication(unittest.TestCase):
+class TestOIDCAuthentication:
     PROVIDER_BASEURL = 'https://op.example.com'
     PROVIDER_NAME = 'test_provider'
     CLIENT_ID = 'client1'
@@ -325,7 +324,6 @@ class TestOIDCAuthentication(unittest.TestCase):
             response = authn._handle_authentication_response()
             assert flask.session['error'] == error_resp
             assert response == '/redirect_uri?error=1'
-
 
     def test_handle_authentication_response_without_initialised_session(self):
         authn = self.init_app()
@@ -681,11 +679,11 @@ class TestOIDCAuthentication(unittest.TestCase):
 
         authn = self.init_app()
         with self.app.test_request_context('/'):
-            self.assertFalse(authn._check_authorization_header(flask.request))
+            assert not authn._check_authorization_header(flask.request)
             flask.request.headers = {
                 'Authorization': 'Bearer access_token'
             }
-            self.assertTrue(authn._check_authorization_header(flask.request))
+            assert authn._check_authorization_header(flask.request) 
 
     def test_should_parse_access_token_from_request_header(self):
 
@@ -694,11 +692,10 @@ class TestOIDCAuthentication(unittest.TestCase):
             flask.request.headers = {
                 'Authorization': 'Bearer access_token'
             }
-            self.assertEqual(authn._parse_access_token(flask.request),
-                             'access_token')
+            assert authn._parse_access_token(flask.request) == 'access_token'
 
     @responses.activate
-    def test_introspect_token_should_return_False_if_invalid_access_token(self):
+    def test_introspect_token_should_return_none_if_invalid_access_token(self):
 
         introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
         authn = self.init_app(provider_metadata_extras={
@@ -709,11 +706,11 @@ class TestOIDCAuthentication(unittest.TestCase):
             }
             responses.add(responses.POST, introspection_endpoint,
                           json={'active': False})
-            self.assertFalse(authn.introspect_token(
-                flask.request, authn.clients[self.PROVIDER_NAME]))
+            assert authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME]) is None
 
     @responses.activate
-    def test_introspect_token_should_return_False_if_client_id_not_in_audience(self):
+    def test_introspect_token_should_return_none_if_client_id_not_in_audience(self):
 
         introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
         authn = self.init_app(provider_metadata_extras={
@@ -728,11 +725,11 @@ class TestOIDCAuthentication(unittest.TestCase):
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
-            self.assertFalse(authn.introspect_token(
-                flask.request, authn.clients[self.PROVIDER_NAME]))
+            assert authn.introspect_token(
+                flask.request, authn.clients[self.PROVIDER_NAME]) is None
 
     @responses.activate
-    def test_introspect_token_should_return_False_if_required_scopes_not_permitted(self):
+    def test_introspect_token_should_return_none_if_required_scopes_not_permitted(self):
 
         introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
         authn = self.init_app(provider_metadata_extras={
@@ -748,9 +745,9 @@ class TestOIDCAuthentication(unittest.TestCase):
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
-            self.assertFalse(authn.introspect_token(
+            assert authn.introspect_token(
                 flask.request, authn.clients[self.PROVIDER_NAME],
-                scopes=['read', 'write', 'delete']))
+                scopes=['read', 'write', 'delete']) is None
 
     @responses.activate
     def test_introspect_token_should_return_introspection_result_if_valid_access_token(self):
@@ -766,22 +763,21 @@ class TestOIDCAuthentication(unittest.TestCase):
                 'active': True,
                 'aud': ['admin', 'user', self.CLIENT_ID],
                 'scope': 'read write delete',
-                'client_id': 'watchdogs'
+                'client_id': self.CLIENT_ID
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
             introspection_result = authn.introspect_token(
                 flask.request, authn.clients[self.PROVIDER_NAME])
-            self.assertEqual(token_introspection_response,
-                             introspection_result.to_dict())
+            assert token_introspection_response == introspection_result.to_dict()
 
-    def test_token_auth_should_abort_request_if_authorization_missing(self):
+    def test_token_auth_should_raise_unauthorized_if_authorization_missing(self):
 
         authn = self.init_app()
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
-            self.assertRaises(HTTPException, authn.token_auth(
-                self.PROVIDER_NAME)(view_mock))
+            with pytest.raises(Unauthorized):
+                authn.token_auth(self.PROVIDER_NAME)(view_mock)()
 
     @responses.activate
     def test_token_auth_should_run_view_function_if_valid_token(self):
@@ -795,7 +791,7 @@ class TestOIDCAuthentication(unittest.TestCase):
             'active': True,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': 'watchdogs'
+            'client_id': self.CLIENT_ID
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
@@ -806,11 +802,10 @@ class TestOIDCAuthentication(unittest.TestCase):
             authn.token_auth(self.PROVIDER_NAME,
                              scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            self.assertEqual(flask._app_ctx_stack.top.current_token_identity,
-                             token_introspection_response)
+            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
 
     @responses.activate
-    def test_token_auth_should_abort_request_if_invalid_token(self):
+    def test_token_auth_should_raise_forbidden_if_invalid_token(self):
 
         introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
         authn = self.init_app(provider_metadata_extras={
@@ -821,7 +816,7 @@ class TestOIDCAuthentication(unittest.TestCase):
             'active': False,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': 'watchdogs'
+            'client_id': self.CLIENT_ID
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
@@ -829,9 +824,10 @@ class TestOIDCAuthentication(unittest.TestCase):
             flask.request.headers = {
                 'Authorization': 'Bearer access_token'
             }
-            self.assertRaises(HTTPException, authn.token_auth(
-                self.PROVIDER_NAME,
-                scopes_required=['read', 'write'])(view_mock))
+            with pytest.raises(Forbidden):
+                authn.token_auth(
+                    self.PROVIDER_NAME,
+                    scopes_required=['read', 'write'])(view_mock)()
 
     @responses.activate
     def test_access_control_should_fallback_to_oidc_auth_on_401(self):
@@ -856,7 +852,7 @@ class TestOIDCAuthentication(unittest.TestCase):
             'active': False,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': 'watchdogs'
+            'client_id': self.CLIENT_ID
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
@@ -864,9 +860,10 @@ class TestOIDCAuthentication(unittest.TestCase):
             flask.request.headers = {
                 'Authorization': 'Bearer access_token'
             }
-            self.assertRaises(HTTPException, authn.access_control(
-                self.PROVIDER_NAME,
-                scopes_required=['read', 'write'])(view_mock))
+            with pytest.raises(Forbidden):
+                authn.access_control(
+                    self.PROVIDER_NAME,
+                    scopes_required=['read', 'write'])(view_mock)()
 
     @responses.activate
     def test_access_control_should_run_view_function_if_valid_token(self):
@@ -880,7 +877,7 @@ class TestOIDCAuthentication(unittest.TestCase):
             'active': True,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': 'watchdogs'
+            'client_id': self.CLIENT_ID
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
@@ -892,5 +889,4 @@ class TestOIDCAuthentication(unittest.TestCase):
                 self.PROVIDER_NAME,
                 scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            self.assertEqual(flask._app_ctx_stack.top.current_token_identity,
-                             token_introspection_response)
+            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response

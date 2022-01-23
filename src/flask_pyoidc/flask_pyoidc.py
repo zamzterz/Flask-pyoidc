@@ -17,7 +17,7 @@ import functools
 import json
 import logging
 import time
-from typing import Union
+from typing import Optional
 from urllib.parse import parse_qsl
 
 import flask
@@ -28,7 +28,7 @@ from oic import rndstr
 from oic.extension.message import TokenIntrospectionResponse
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import Forbidden, Unauthorized
 from werkzeug.local import LocalProxy
 from werkzeug.routing import BuildError
 from werkzeug.utils import redirect
@@ -369,8 +369,8 @@ class OIDCAuthentication:
         _, access_token = request.headers['Authorization'].split(maxsplit=1)
         return access_token
 
-    def introspect_token(self, request, client, scopes: list = None) -> Union[
-            TokenIntrospectionResponse, bool]:
+    def introspect_token(self, request, client, scopes: list = None) ->\
+            Optional[TokenIntrospectionResponse]:
         """RFC 7662: Token Introspection
         The Token Introspection extension defines a mechanism for resource
         servers to obtain information about access tokens. With this spec,
@@ -391,12 +391,6 @@ class OIDCAuthentication:
         -------
         bool
             True if access_token is valid else False.
-
-        Raises
-        ------
-        NotForMe
-            If access_token is invalid.
-
         """
         received_access_token = self._parse_access_token(request)
         # send token introspection request
@@ -405,19 +399,19 @@ class OIDCAuthentication:
         logger.debug(result)
         # Check if access_token is valid, active can be True or False
         if not result.get('active'):
-            return False
+            return
         # Check if client_id is in audience claim
         if client._client.client_id not in result['aud']:
             # log the exception if client_id is not in audience and returns
             # False, you can configure audience with Identity Provider
-            logger.info('Token is valid but required audience is missing')
-            return False
+            logger.info('Token is valid but required audience is missing.')
+            return
         # Check if the scopes associated with the access_token are the ones
         # required by the endpoint and not something else which is not
         # permitted.
         if scopes and not set(scopes).issubset(set(result['scope'])):
-            logger.info('Token is valid but does not have required scopes')
-            return False
+            logger.info('Token is valid but does not have required scopes.')
+            return
         return result
 
     def token_auth(self, provider_name, scopes_required: list = None):
@@ -463,7 +457,7 @@ class OIDCAuthentication:
                     request=flask.request, client=client,
                     scopes=scopes_required)
                 if token_introspection_result:
-                    logger.info('user has valid access token')
+                    logger.info('Request has valid access token.')
                     # Store token introspection info within the application
                     # context.
                     _app_ctx_stack.top.current_token_identity = token_introspection_result.to_dict()
@@ -513,22 +507,21 @@ class OIDCAuthentication:
             def wrapper(*args, **kwargs):
 
                 try:
-                    # If the request header contains auhorization, token_auth
+                    # If the request header contains authorization, token_auth
                     # verifies the access_token otherwise an exception occurs
                     # and the request falls back to oidc_auth.
                     return self.token_auth(provider_name, scopes_required)(
                         view_func)(*args, **kwargs)
-                except HTTPException as ex:
-                    # token_auth will raise the HTTPException if either
-                    # authorization field is missing from the request header or
-                    # token is invalid. If the authorization field is missing,
-                    # fallback to oidc.
-                    logger.debug(ex.code)
-                    if ex.code == 403:
-                        # If token is present, but it's invalid, do not fall
-                        # back to oidc_auth. Instead, abort the request.
-                        flask.abort(403)
+                # token_auth will raise the HTTPException if either
+                # authorization field is missing from the request header or
+                # token is invalid. If the authorization field is missing,
+                # fallback to oidc.
+                except Unauthorized:
                     return fallback_to_oidc(*args, **kwargs)
+                # If token is present, but it's invalid, do not fall back to
+                # oidc_auth. Instead, abort the request.
+                except Forbidden:
+                    flask.abort(403)
 
             return wrapper
 

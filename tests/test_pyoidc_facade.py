@@ -17,7 +17,7 @@ from .util import signed_id_token
 REDIRECT_URI = 'https://rp.example.com/redirect_uri'
 
 
-class TestPyoidcFacade(unittest.TestCase):
+class TestPyoidcFacade:
     PROVIDER_BASEURL = 'https://op.example.com'
     PROVIDER_METADATA = ProviderMetadata(PROVIDER_BASEURL,
                                          PROVIDER_BASEURL + '/auth',
@@ -252,8 +252,7 @@ class TestPyoidcFacade(unittest.TestCase):
             'token_type': 'Bearer'}
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
-        self.assertEqual(client_credentials_grant_response,
-                         facade.client_credentials_grant().to_dict())
+        assert client_credentials_grant_response == facade.client_credentials_grant().to_dict()
 
 
 class TestClientAuthentication(object):
