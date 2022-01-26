@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 
+from oic.extension.client import Client as ClientExtension
 from oic.oic import Client, RegistrationResponse, AuthorizationResponse, \
     AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse
 from oic.oic.message import ProviderConfigurationResponse
@@ -50,6 +51,9 @@ class PyoidcFacade:
         """
         self._provider_configuration = provider_configuration
         self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
+        # Token Introspection is implemented in extension sub-package of the
+        # client in pyoidc
+        self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
 
         provider_metadata = provider_configuration.ensure_provider_metadata()
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
@@ -220,6 +224,54 @@ class PyoidcFacade:
         logger.debug('received userinfo response: %s', userinfo_response.to_json())
 
         return userinfo_response
+
+    def _token_introspection_request(self, access_token: str):
+        """Make token introspection request.
+
+        Parameters
+        ----------
+        access_token: str
+            Access token to be validated.
+
+        Returns
+        -------
+        oic.extension.message.TokenIntrospectionResponse
+            Response object contains result of the token introspection.
+        """
+        args = {
+            'token': access_token,
+            'client_id': self._client.client_id,
+            'client_secret': self._client.client_secret
+        }
+        token_introspection_request = self._client_extension.construct_TokenIntrospectionRequest(
+            request_args=args
+        )
+        logger.info('making token introspection request')
+        return self._client_extension.do_token_introspection(
+            request_args=token_introspection_request,
+            endpoint=self._client.introspection_endpoint)
+
+    def client_credentials_grant(self):
+        """Public method to request access_token using client_credentials flow.
+        This is useful for service to service communication where user-agent is
+        not available which is required in authorization code flow. Your
+        service can request access_token in order to access APIs of other
+        services.
+
+        On API call, token introspection will ensure that only valid token can
+        be used to access your APIs.
+
+        How To Use
+        ----------
+        >>> auth = OIDCAuthentication({'default': provider_config},
+                                      access_token_required=True)
+        >>> auth.init_app(app)
+        >>> auth.clients['default'].client_credentials_grant()
+        """
+        client_credentials_payload = {
+            'grant_type': 'client_credentials'
+        }
+        return self._token_request(request=client_credentials_payload)
 
     @property
     def session_refresh_interval_seconds(self):

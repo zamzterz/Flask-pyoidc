@@ -17,15 +17,19 @@ import functools
 import json
 import logging
 import time
+from typing import Optional
 from urllib.parse import parse_qsl
 
 import flask
 import importlib_resources
-from flask import current_app
+from flask import _app_ctx_stack, current_app
 from flask.helpers import url_for
 from oic import rndstr
+from oic.extension.message import TokenIntrospectionResponse
 from oic.oic import AuthorizationRequest
 from oic.oic.message import EndSessionRequest
+from werkzeug.exceptions import Forbidden, Unauthorized
+from werkzeug.local import LocalProxy
 from werkzeug.routing import BuildError
 from werkzeug.utils import redirect
 
@@ -42,7 +46,8 @@ class OIDCAuthentication:
     OIDCAuthentication object for Flask extension.
     """
 
-    def __init__(self, provider_configurations, app=None, redirect_uri_config=None):
+    def __init__(self, provider_configurations, app=None,
+                 redirect_uri_config=None):
         """
         Args:
             provider_configurations (Mapping[str, ProviderConfiguration]):
@@ -56,6 +61,12 @@ class OIDCAuthentication:
         self.clients = None
         self._logout_view = None
         self._error_view = None
+        # current_token_identity proxy to obtain user info whose token was
+        # passed in the request. It is available until current request only and
+        # is destroyed between the requests. The value is set by token_auth
+        # decorator.
+        self.current_token_identity = LocalProxy(lambda: getattr(
+            _app_ctx_stack.top, 'current_token_identity', None))
         self._redirect_uri_config = redirect_uri_config
 
         if app:
@@ -203,7 +214,8 @@ class OIDCAuthentication:
 
         return 'Something went wrong with the authentication, please try to login again.'
 
-    def oidc_auth(self, provider_name):
+    def oidc_auth(self, provider_name: str):
+
         if provider_name not in self._provider_configurations:
             raise ValueError(
                 "Provider name '{}' not in configured providers: {}.".format(provider_name,
@@ -211,8 +223,10 @@ class OIDCAuthentication:
             )
 
         def oidc_decorator(view_func):
+
             @functools.wraps(view_func)
             def wrapper(*args, **kwargs):
+
                 session = UserSession(flask.session, provider_name)
                 client = self.clients[session.current_provider]
 
@@ -319,3 +333,196 @@ class OIDCAuthentication:
                        id_token_jwt=response.get('id_token_jwt'),
                        refresh_token=response.get('refresh_token'))
         return access_token
+
+    @staticmethod
+    def _check_authorization_header(request) -> bool:
+        """Look for authorization in request header.
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object.
+
+        Returns
+        -------
+        bool
+            True if the request header contains authorization else False.
+        """
+        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
+            return True
+        return False
+
+    @staticmethod
+    def _parse_access_token(request) -> str:
+        """Parse access token from the authorization request header.
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object.
+
+        Returns
+        -------
+        accept_token : str
+            access token from the request header.
+        """
+        _, access_token = request.headers['Authorization'].split(maxsplit=1)
+        return access_token
+
+    def introspect_token(self, request, client, scopes: list = None) ->\
+            Optional[TokenIntrospectionResponse]:
+        """RFC 7662: Token Introspection
+        The Token Introspection extension defines a mechanism for resource
+        servers to obtain information about access tokens. With this spec,
+        resource servers can check the validity of access tokens, and find out
+        other information such as which user and which scopes are associated
+        with the token.
+
+        Parameters
+        ----------
+        request : werkzeug.local.LocalProxy
+            flask request object.
+        client : flask_pyoidc.pyoidc_facade.PyoidcFacade
+            PyoidcFacade object contains metadata of the provider and client.
+        scopes : list
+            Specify scopes that are bound for the end endpoint.
+
+        Returns
+        -------
+        bool
+            True if access_token is valid else False.
+        """
+        received_access_token = self._parse_access_token(request)
+        # send token introspection request
+        result = client._token_introspection_request(
+            access_token=received_access_token)
+        logger.debug(result)
+        # Check if access_token is valid, active can be True or False
+        if not result.get('active'):
+            return
+        # Check if client_id is in audience claim
+        if client._client.client_id not in result['aud']:
+            # log the exception if client_id is not in audience and returns
+            # False, you can configure audience with Identity Provider
+            logger.info('Token is valid but required audience is missing.')
+            return
+        # Check if the scopes associated with the access_token are the ones
+        # required by the endpoint and not something else which is not
+        # permitted.
+        if scopes and not set(scopes).issubset(set(result['scope'])):
+            logger.info('Token is valid but does not have required scopes.')
+            return
+        return result
+
+    def token_auth(self, provider_name, scopes_required: list = None):
+        """Token based authorization.
+
+        Parameters
+        ----------
+        provider_name : str
+            Name of the provider registered with OIDCAuthorization.
+        scopes_required : list, optional
+            List of valid scopes associated with the endpoint.
+
+        Raises
+        ------
+        flask.abort(401)
+            If authorization field is missing.
+        flask.abort(403)
+            If the access token is invalid.
+
+        How To Use
+        ----------
+        >>> auth = OIDCAuthentication({'default': provider_config})
+        >>> @app.route('/')
+            @auth.token_auth(provider_name='default')
+            def index():
+                ...
+        >>> # You can also specify scopes required by your endpoint.
+        >>> @auth.token_auth(provider_name='default',
+                             scopes_required=['read', 'write'])
+        """
+        def token_decorator(view_func):
+
+            @functools.wraps(view_func)
+            def wrapper(*args, **kwargs):
+
+                client = self.clients[provider_name]
+                # Check for authorization field in the request header.
+                if not self._check_authorization_header(flask.request):
+                    logger.info('Request header has no authorization field')
+                    # Abort the request if authorization field is missing.
+                    flask.abort(401)
+                token_introspection_result = self.introspect_token(
+                    request=flask.request, client=client,
+                    scopes=scopes_required)
+                if token_introspection_result:
+                    logger.info('Request has valid access token.')
+                    # Store token introspection info within the application
+                    # context.
+                    _app_ctx_stack.top.current_token_identity = token_introspection_result.to_dict()
+                    return view_func(*args, **kwargs)
+                # Forbid access if the access token is invalid.
+                flask.abort(403)
+
+            return wrapper
+
+        return token_decorator
+
+    def access_control(self, provider_name: str,
+                       scopes_required: list = None):
+        """This decorator serves dual purpose that is it can do both token
+        based authorization and oidc based authentication. If your API needs
+        to be accessible by either modes, use this decorator otherwise use
+        either oidc_auth or token_auth.
+
+        Parameters
+        ----------
+        provider_name : str
+            Name of the provider registered with OIDCAuthorization.
+        scopes_required : list, optional
+            List of valid scopes associated with the endpoint.
+
+        Raises
+        ------
+        HTTPException
+            If the authorization is disabled.
+
+        How To Use
+        ----------
+        >>> auth = OIDCAuthentication({'default': provider_config})
+        >>> @app.route('/')
+            @auth.access_control(provider_name='default')
+            def index():
+                ...
+        >>> # You can also specify scopes required by your endpoint.
+        >>> @auth.access_control(provider_name='default',
+                                 scopes_required=['read', 'write'])
+        """
+        def hybrid_decorator(view_func):
+
+            fallback_to_oidc = self.oidc_auth(provider_name)(view_func)
+
+            @functools.wraps(view_func)
+            def wrapper(*args, **kwargs):
+
+                try:
+                    # If the request header contains authorization, token_auth
+                    # verifies the access_token otherwise an exception occurs
+                    # and the request falls back to oidc_auth.
+                    return self.token_auth(provider_name, scopes_required)(
+                        view_func)(*args, **kwargs)
+                # token_auth will raise the HTTPException if either
+                # authorization field is missing from the request header or
+                # token is invalid. If the authorization field is missing,
+                # fallback to oidc.
+                except Unauthorized:
+                    return fallback_to_oidc(*args, **kwargs)
+                # If token is present, but it's invalid, do not fall back to
+                # oidc_auth. Instead, abort the request.
+                except Forbidden:
+                    flask.abort(403)
+
+            return wrapper
+
+        return hybrid_decorator
