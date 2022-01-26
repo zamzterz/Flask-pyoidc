@@ -1,33 +1,80 @@
 # Configuration
 
-## Provider and client configuration
+## Provider & Client Configuration
 
-Both static and dynamic provider configuration discovery, as well as static
-and dynamic client registration, is supported. The different modes of provider configuration can be combined with any
+Both static and dynamic provider configuration discovery, as well as static and dynamic client registration, is supported. The different modes of provider configuration can be combined with any
 of the client registration modes.
 
-### Provider configuration
+## Client Configuration
+---
 
-#### Dynamic provider configuration
+### Static Client Registration
+
+If you have already registered a client with the provider, specify the client credentials directly:
+```python
+from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
+
+client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wLipXfUUR50jlZ')
+```
+
+**Note: The redirect URIs registered with the provider MUST include the URI specified in 
+[`OIDC_REDIRECT_URI`](#flask-configuration).**
+
+
+### Dynamic Client Registration
+
+To dynamically register a new client for your application, the required client registration info can be specified:
+
+```python
+from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
+
+client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@rp.example.com'])
+```
+
+## Provider configuration
+---
+
+### Dynamic provider configuration
 
 To use a provider which supports dynamic discovery it suffices to specify the issuer URL:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration
 
-config = ProviderConfiguration(issuer='https://op.example.com', [client configuration])
+# If you are using Static Client Configuration, then specify client_metadata
+# as shown above.
+provider_config = ProviderConfiguration(issuer='https://keycloak:8080/auth/realms/master',
+                                        client_metadata=client_metadata)
+
+# If you are using Dynamic Client Registration, then specify
+# client_registration_info as shown above.
+provider_config = ProviderConfiguration(issuer='https://keycloak:8080/auth/realms/master',
+                                        client_registration_info=client_registration_info)
 ```
 
-#### Static provider configuration
+### Static provider configuration
 
 To use a provider not supporting dynamic discovery, the static provider metadata can be specified:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata
 
-provider_metadata = ProviderMetadata(issuer='https://op.example.com',
-                                     authorization_endpoint='https://op.example.com/auth',
-                                     jwks_uri='https://op.example.com/jwks',
-                                     userinfo_endpoint='https://op.example.com/userinfo')
-config = ProviderConfiguration(provider_metadata=provider_metadata, [client configuration])
+provider_metadata = ProviderMetadata(issuer='https://keycloak:8080/auth/realms/master',
+                                     authorization_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/auth',
+                                     token_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token',
+                                     introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+                                     userinfo_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/userinfo',
+                                     end_session_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/logout',
+                                     jwks_uri='https://keycloak:8080/auth/realms/master/protocol/openid-connect/certs',
+                                     registration_endpoint='https://keycloak:8080/auth/realms/master/clients-registrations/openid-connect'
+                                     )
+# As shown earlier, if you are using Static Client Configuration, then specify
+# client_metadata.
+provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
+                                        client_metadata=client_metadata)
+
+# If you are using Dynamic Client Registration, then specify
+# client_registration_info.
+provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
+                                        client_registration_info=client_registration_info)
 ```
 
 See the OpenID Connect specification for more information about the
@@ -57,32 +104,6 @@ config = ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/
 ```
 
 **Note: The user will still be logged out when the session expires (as set in the Flask session configuration).**
-
-### Client configuration
-
-#### Static client registration
-
-If you have already registered a client with the provider, specify the client credentials directly:
-```python
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
-
-client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wLipXfUUR50jlZ')
-config = ProviderConfiguration([provider configuration], client_metadata=client_metadata)
-```
-
-**Note: The redirect URIs registered with the provider MUST include the URI specified in 
-[`OIDC_REDIRECT_URI`](#flask-configuration).**
-
-#### Dynamic client registration
-
-To dynamically register a new client for your application, the required client registration info can be specified:
-
-```python
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
-
-client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@rp.example.com'])
-config = ProviderConfiguration([provider configuration], client_registration_info=client_registration_info)
-```
 
 ## Flask configuration
 

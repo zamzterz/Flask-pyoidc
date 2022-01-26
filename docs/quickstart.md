@@ -1,6 +1,5 @@
 # Quickstart
 
-To add authentication to one of your endpoints use the `oidc_auth` decorator:
 ```python
 import flask
 from flask import Flask, jsonify
@@ -14,10 +13,38 @@ app.config.update(
     OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
     SECRET_KEY = ...
 )
-config = ProviderConfiguration(...)
-auth = OIDCAuthentication({'default': config}, app)
 
-@app.route('/login')
+# Static Client Registration
+# If you have already registered a client with the provider, specify the client
+# credentials directly:
+client_metadata = ClientMetadata(
+    client_id='832d42efc18a85864cd2dfa36c3933d6',
+    client_secret='7def3d844d9e04bd567162bf1a73e79a50299a5177d0a51146695efd1378478f',
+    post_logout_redirect_uris=['http://localhost:5000/logout'])
+
+# Static provider configuration
+# To use a provider not supporting dynamic discovery, the static provider
+# metadata can be specified:
+provider_metadata = ProviderMetadata(
+    issuer='https://keycloak:8080/auth/realms/master',
+    authorization_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/auth',
+    token_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token',
+    introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+    userinfo_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/userinfo',
+    end_session_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/logout',
+    jwks_uri='https://keycloak:8080/auth/realms/master/protocol/openid-connect/certs',
+    registration_endpoint='https://keycloak:8080/auth/realms/master/clients-registrations/openid-connect')
+
+provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
+                                        client_metadata=client_metadata)
+
+auth = OIDCAuthentication({'default': provider_config}, app)
+```
+
+## OIDC
+To add authentication to your endpoints use the `oidc_auth` decorator:
+```python
+@app.route('/api')
 @auth.oidc_auth('default')
 def index():
     user_session = UserSession(flask.session)
@@ -25,8 +52,93 @@ def index():
                    id_token=user_session.id_token,
                    userinfo=user_session.userinfo)
 ```
+---
+## Token Based Authorization
+To add token based authorization to your endpoints use the `token_auth`
+decorator. It allows you to call your endpoint with curl and REST API clients
+given "Authorization Bearer <access_token>" field is present in the request
+header. Token based authorization is backed by token introspection so ensure
+that Identity Provider's intospection endpoint is provided.
+```python
+provider_metadata = ProviderMetadata(
+    ...,
+    introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+    ...)
 
-You can also use a Flask application factory:
+@app.route('/api')
+@auth.token_auth('default')
+def index():
+    current_token_identity = auth.current_token_identity
+    ...
+
+# Optionally, you can specify scopes required by your endpoint.
+@app.route('/api')
+@auth.token_auth('default',
+                 scopes_required=['read', 'write'])
+def index():
+    current_token_identity = auth.current_token_identity
+    ...
+```
+To obtain information about the token, use `auth.current_token_identity` inside
+your endpoint. `current_token_identity` persists for current request only.
+
+---
+## OIDC & Token Based Authorization
+If you want to apply both oidc based authentication and token based
+authorization on your endpoint, you can use `access_control` decorator.
+```python
+# If you are using Static Provider Configuration, add introspection_endpoint
+# in ProviderMetadata.
+provider_metadata = ProviderMetadata(
+    ...,
+    introspection_endpoint='http://localhost:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+    ...)
+
+@app.route('/api')
+@auth.access_control('default')
+def index():
+    current_identity = None
+    if auth.current_token_identity:
+        current_identity = auth.current_token_identity
+    else:
+        current_identity = UserSession(flask.session)
+    ...
+
+# Optionally, you can specify scopes required by your endpoint.
+@app.route('/api')
+@auth.access_control('default',
+                     scopes_required=['read', 'write'])
+def index():
+    current_identity = None
+    if auth.current_token_identity:
+        current_identity = auth.current_token_identity
+    else:
+        current_identity = UserSession(flask.session)
+    ...
+```
+---
+
+## Client Credentials Flow
+The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type is used by clients to obtain an access token outside of the context of a user.
+
+This is typically used by clients to access resources about themselves rather than to access a user's resources.
+
+Client can obtain access token by using `client_credentials_grant`.
+
+```python
+auth = OIDCAuthentication({'default': provider_config}, app)
+
+client_credentials_response = auth.clients['default'].client_credentials_grant()
+access_token = resp.get('access_token')
+```
+Use the obtained `access_token` to access your web service APIs.
+If your API endpoints are protected with `@auth.token_auth` or
+`@auth.access_control`, `access_token` will be verfied by token introspection
+before allowing access.
+
+---
+
+## You can also use Flask application factory:
 
 ```python
 config = ProviderConfiguration(...)
@@ -88,7 +200,7 @@ def logout():
 ```
 
 If the logout view is mounted under a custom endpoint (other than the default, which is 
-[the name of the view function](http://flask.pocoo.org/docs/1.0/api/#flask.Flask.route)), or if using Blueprints, you
+[the name of the view function](https://flask.palletsprojects.com/en/2.0.x/api/#flask.Flask.route)), or if using Blueprints, you
 must specify the full URL in the Flask-pyoidc configuration using `post_logout_redirect_uris`:
 ```python
 ClientMetadata(..., post_logout_redirect_uris=['https://example.com/post_logout']) # if using static client registration
