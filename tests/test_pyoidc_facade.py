@@ -1,6 +1,8 @@
 import time
 
 import base64
+import unittest
+
 import pytest
 import responses
 from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema, \
@@ -15,7 +17,7 @@ from .util import signed_id_token
 REDIRECT_URI = 'https://rp.example.com/redirect_uri'
 
 
-class TestPyoidcFacade(object):
+class TestPyoidcFacade:
     PROVIDER_BASEURL = 'https://op.example.com'
     PROVIDER_METADATA = ProviderMetadata(PROVIDER_BASEURL,
                                          PROVIDER_BASEURL + '/auth',
@@ -230,6 +232,27 @@ class TestPyoidcFacade(object):
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
         assert facade.userinfo_request(None) is None
+
+    @responses.activate
+    def test_client_credentials_grant(self):
+        token_endpoint = f'{self.PROVIDER_BASEURL}/token'
+        provider_metadata = self.PROVIDER_METADATA.copy(
+            token_endpoint=token_endpoint)
+        facade = PyoidcFacade(
+            ProviderConfiguration(
+                provider_metadata=provider_metadata,
+                client_metadata=self.CLIENT_METADATA),
+            REDIRECT_URI)
+        client_credentials_grant_response = {
+            'access_token': 'access_token',
+            'expires_in': 60,
+            'not-before-policy': 0,
+            'refresh_expires_in': 0,
+            'scope': 'read write',
+            'token_type': 'Bearer'}
+        responses.add(responses.POST, token_endpoint,
+                      json=client_credentials_grant_response)
+        assert client_credentials_grant_response == facade.client_credentials_grant().to_dict()
 
 
 class TestClientAuthentication(object):
