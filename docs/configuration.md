@@ -1,9 +1,7 @@
 # Configuration
 
-## Provider & Client Configuration
-
-Both static and dynamic provider configuration discovery, as well as static and dynamic client registration, is supported. The different modes of provider configuration can be combined with any
-of the client registration modes.
+Both static and dynamic provider configuration discovery, as well as static and dynamic client registration, is
+supported. The different modes of provider configuration can be combined with any of the client registration modes.
 
 ## Client Configuration
 ---
@@ -14,11 +12,11 @@ If you have already registered a client with the provider, specify the client cr
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
 
-client_metadata = ClientMetadata(client_id='cl41ekfb9j', client_secret='m1C659wLipXfUUR50jlZ')
+client_metadata = ClientMetadata(client_id='client1', client_secret='secret1')
 ```
 
-**Note: The redirect URIs registered with the provider MUST include the URI specified in 
-[`OIDC_REDIRECT_URI`](#flask-configuration).**
+**Note: The redirect URIs registered with the provider MUST include the URI specified in
+[`OIDC_REDIRECT_URI`](https://flask.palletsprojects.com/en/2.0.x/config/).**
 
 
 ### Dynamic Client Registration
@@ -28,7 +26,7 @@ To dynamically register a new client for your application, the required client r
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
 
-client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@rp.example.com'])
+client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'])
 ```
 
 ## Provider configuration
@@ -42,12 +40,12 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration
 
 # If you are using Static Client Configuration, then specify client_metadata
 # as shown above.
-provider_config = ProviderConfiguration(issuer='https://keycloak:8080/auth/realms/master',
+provider_config = ProviderConfiguration(issuer='https://idp.example.com',
                                         client_metadata=client_metadata)
 
 # If you are using Dynamic Client Registration, then specify
 # client_registration_info as shown above.
-provider_config = ProviderConfiguration(issuer='https://keycloak:8080/auth/realms/master',
+provider_config = ProviderConfiguration(issuer='https://idp.example.com',
                                         client_registration_info=client_registration_info)
 ```
 
@@ -57,14 +55,14 @@ To use a provider not supporting dynamic discovery, the static provider metadata
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata
 
-provider_metadata = ProviderMetadata(issuer='https://keycloak:8080/auth/realms/master',
-                                     authorization_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/auth',
-                                     token_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token',
-                                     introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
-                                     userinfo_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/userinfo',
-                                     end_session_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/logout',
-                                     jwks_uri='https://keycloak:8080/auth/realms/master/protocol/openid-connect/certs',
-                                     registration_endpoint='https://keycloak:8080/auth/realms/master/clients-registrations/openid-connect'
+provider_metadata = ProviderMetadata(issuer='https://idp.example.com',
+                                     authorization_endpoint='https://idp.example.com/auth',
+                                     token_endpoint='https://idp.example.com/token',
+                                     introspection_endpoint='https://idp.example.com/introspect',
+                                     userinfo_endpoint='https://idp.example.com/userinfo',
+                                     end_session_endpoint='https://idp.example.com/logout',
+                                     jwks_uri='https://idp.example.com/certs',
+                                     registration_endpoint='https://idp.example.com/registration'
                                      )
 # As shown earlier, if you are using Static Client Configuration, then specify
 # client_metadata.
@@ -80,18 +78,18 @@ provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
 See the OpenID Connect specification for more information about the
 [provider metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata).
 
-As mentioned in OpenID Connect specification, `userinfo_endpoint` is optional. If it's
-not provided, no userinfo request will be done and `flask_pyoidc.UserSession.userinfo` will be set to `None`.  
+As mentioned in OpenID Connect specification, `userinfo_endpoint` is optional. If it's not provided, no userinfo
+request will be done and `flask_pyoidc.UserSession.userinfo` will be set to `None`.  
 
-#### Customizing authentication request parameters
+### Customizing authentication request parameters
 To customize the [authentication request parameters](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest),
 use `auth_request_params` in `ProviderConfiguration`:
 ```python
 auth_params = {'scope': ['openid', 'profile']} # specify the scope to request
-config = ProviderConfiguration([provider/client config], auth_request_params=auth_params)
+provider_config = ProviderConfiguration([provider/client config], auth_request_params=auth_params)
 ```
 
-#### Session refresh
+### Session refresh
 
 If your provider supports the `prompt=none` authentication request parameter, this extension can automatically refresh
 user sessions. This ensures that the user attributes (OIDC claims, user being active, etc.) are kept up-to-date without
@@ -100,10 +98,29 @@ refreshes:
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration
 
-config = ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/client config])
+provier_config = ProviderConfiguration(session_refresh_interval_seconds=1800, [provider/client config])
 ```
 
 **Note: The user will still be logged out when the session expires (as set in the Flask session configuration).**
+
+## Client Credentials Flow
+The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type is used by clients to obtain an access token outside of the context of a user.
+
+This is typically used by clients to access resources about themselves rather than to access a user's resources.
+
+Client can obtain access token by using `client_credentials_grant`.
+
+```python
+auth = OIDCAuthentication({'default': provider_config}, app)
+
+client_credentials_response = auth.clients['default'].client_credentials_grant()
+access_token = resp.get('access_token')
+```
+
+Use the obtained `access_token` to access your web service APIs.
+If your API endpoints are protected with `@auth.token_auth` or
+`@auth.access_control`, `access_token` will be verfied by token introspection
+before allowing access.
 
 ## Flask configuration
 
@@ -121,7 +138,7 @@ This extension also uses the following configuration parameters:
 * `PERMANENT_SESSION_LIFETIME`: Control how long a user session is valid, see
   [Flask documentation](http://flask.pocoo.org/docs/1.0/config/#PERMANENT_SESSION_LIFETIME) for more information.
 
-#### Legacy configuration parameters
+### Legacy configuration parameters
 The following parameters have been deprecated:
 * `OIDC_REDIRECT_DOMAIN`: Set the domain (which may contain port number) used in the redirect_uri to receive
   authentication responses. Defaults to the `SERVER_NAME` configured for Flask.

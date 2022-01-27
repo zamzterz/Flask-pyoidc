@@ -8,7 +8,7 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMet
 from flask_pyoidc.user_session import UserSession
 
 app = Flask(__name__)
-# See http://flask.pocoo.org/docs/0.12/config/
+# See https://flask.palletsprojects.com/en/2.0.x/config/
 app.config.update({'OIDC_REDIRECT_URI': 'http://localhost:5000/redirect_uri',
                    'SECRET_KEY': 'dev_key',  # make sure to change this!!
                    'PERMANENT_SESSION_LIFETIME': datetime.timedelta(days=7).total_seconds(),
@@ -43,6 +43,27 @@ def login2():
     return jsonify(access_token=user_session.access_token,
                    id_token=user_session.id_token,
                    userinfo=user_session.userinfo)
+
+
+@app.route('/index')
+@auth.token_auth(PROVIDER_NAME1,
+                 scopes_required=['read', 'write'])
+def index():
+    current_token_identity = auth.current_token_identity
+    return current_token_identity
+
+
+@app.route('/profile')
+@auth.access_control(PROVIDER_NAME1,
+                     scopes_required=['read', 'write'])
+def profile():
+    if auth.current_token_identity:
+        return auth.current_token_identity
+    else:
+        user_session = UserSession(flask.session)
+        return jsonify(access_token=user_session.access_token,
+                       id_token=user_session.id_token,
+                       userinfo=user_session.userinfo)
 
 
 @app.route('/logout')

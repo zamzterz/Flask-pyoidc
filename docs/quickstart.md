@@ -18,22 +18,22 @@ app.config.update(
 # If you have already registered a client with the provider, specify the client
 # credentials directly:
 client_metadata = ClientMetadata(
-    client_id='832d42efc18a85864cd2dfa36c3933d6',
-    client_secret='7def3d844d9e04bd567162bf1a73e79a50299a5177d0a51146695efd1378478f',
-    post_logout_redirect_uris=['http://localhost:5000/logout'])
+    client_id='client1',
+    client_secret='secret1',
+    post_logout_redirect_uris=['https://example.com/logout'])
 
 # Static provider configuration
 # To use a provider not supporting dynamic discovery, the static provider
 # metadata can be specified:
 provider_metadata = ProviderMetadata(
-    issuer='https://keycloak:8080/auth/realms/master',
-    authorization_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/auth',
-    token_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token',
-    introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
-    userinfo_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/userinfo',
-    end_session_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/logout',
-    jwks_uri='https://keycloak:8080/auth/realms/master/protocol/openid-connect/certs',
-    registration_endpoint='https://keycloak:8080/auth/realms/master/clients-registrations/openid-connect')
+    issuer='https://idp.example.com',
+    authorization_endpoint='https://idp.example.com/auth',
+    token_endpoint='https://idp.example.com/token',
+    introspection_endpoint='https://idp.example.com/introspect',
+    userinfo_endpoint='https://idp.example.com/userinfo',
+    end_session_endpoint='https://idp.example.com/logout',
+    jwks_uri='https://idp.example.com/certs',
+    registration_endpoint='https://idp.example.com/registration')
 
 provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
                                         client_metadata=client_metadata)
@@ -41,7 +41,23 @@ provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
 auth = OIDCAuthentication({'default': provider_config}, app)
 ```
 
+You can also use Flask application factory:
+```python
+config = ProviderConfiguration(...)
+auth = OIDCAuthentication({'default': config})
+
+def create_app():
+    app = Flask(__name__)
+    app.config.update(
+        OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
+        SECRET_KEY = ...
+    )
+    auth.init_app(app)
+    return app
+```
+
 ## OIDC
+
 To add authentication to your endpoints use the `oidc_auth` decorator:
 ```python
 @app.route('/api')
@@ -52,17 +68,18 @@ def index():
                    id_token=user_session.id_token,
                    userinfo=user_session.userinfo)
 ```
----
+
 ## Token Based Authorization
+
 To add token based authorization to your endpoints use the `token_auth`
 decorator. It allows you to call your endpoint with curl and REST API clients
 given "Authorization Bearer <access_token>" field is present in the request
 header. Token based authorization is backed by token introspection so ensure
-that Identity Provider's intospection endpoint is provided.
+that Identity Provider's introspection endpoint is provided.
 ```python
 provider_metadata = ProviderMetadata(
     ...,
-    introspection_endpoint='https://keycloak:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+    introspection_endpoint='https://idp.example.com/introspect',
     ...)
 
 @app.route('/api')
@@ -82,8 +99,8 @@ def index():
 To obtain information about the token, use `auth.current_token_identity` inside
 your endpoint. `current_token_identity` persists for current request only.
 
----
 ## OIDC & Token Based Authorization
+
 If you want to apply both oidc based authentication and token based
 authorization on your endpoint, you can use `access_control` decorator.
 ```python
@@ -91,7 +108,7 @@ authorization on your endpoint, you can use `access_control` decorator.
 # in ProviderMetadata.
 provider_metadata = ProviderMetadata(
     ...,
-    introspection_endpoint='http://localhost:8080/auth/realms/master/protocol/openid-connect/token/introspect',
+    introspection_endpoint='https://idp.example.com/introspect',
     ...)
 
 @app.route('/api')
@@ -116,43 +133,8 @@ def index():
         current_identity = UserSession(flask.session)
     ...
 ```
----
-
-## Client Credentials Flow
-The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type is used by clients to obtain an access token outside of the context of a user.
-
-This is typically used by clients to access resources about themselves rather than to access a user's resources.
-
-Client can obtain access token by using `client_credentials_grant`.
-
-```python
-auth = OIDCAuthentication({'default': provider_config}, app)
-
-client_credentials_response = auth.clients['default'].client_credentials_grant()
-access_token = resp.get('access_token')
-```
-Use the obtained `access_token` to access your web service APIs.
-If your API endpoints are protected with `@auth.token_auth` or
-`@auth.access_control`, `access_token` will be verfied by token introspection
-before allowing access.
 
 ---
-
-## You can also use Flask application factory:
-
-```python
-config = ProviderConfiguration(...)
-auth = OIDCAuthentication({'default': config})
-
-def create_app():
-    app = Flask(__name__)
-    app.config.update(
-        OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
-        SECRET_KEY = ...
-    )
-    auth.init_app(app)
-    return app
-```
 
 After a successful login, this extension will place three things in the user session (if they are received from the
 provider):
@@ -168,25 +150,17 @@ In addition to this documentation, you may have a look on a
 To allow users to login with multiple different providers, configure all of them in the `OIDCAuthentication`
 constructor and specify which one to use by name for each endpoint:
 ```python
-from flask_pyoidc import OIDCAuthentication
-from flask_pyoidc.provider_configuration import ProviderConfiguration
-
-app = Flask(__name__)
-app.config.update(
-    OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
-    SECRET_KEY = ...
-)
 auth = OIDCAuthentication({'provider1': ProviderConfiguration(...), 'provider2': ProviderConfiguration(...)}, app)
 
 @app.route('/login1')
 @auth.oidc_auth('provider1')
 def login1():
-    pass
+    ...
 
 @app.route('/login2')
 @auth.oidc_auth('provider2')
 def login2():
-    pass
+    ...
 ```
 
 ## User logout
@@ -196,7 +170,7 @@ To support user logout, use the `oidc_logout` decorator:
 @app.route('/logout')
 @auth.oidc_logout
 def logout():
-    return 'You\'ve been successfully logged out!'
+    return "You've been successfully logged out!"
 ```
 
 If the logout view is mounted under a custom endpoint (other than the default, which is 
