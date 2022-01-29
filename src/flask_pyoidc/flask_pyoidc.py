@@ -340,7 +340,7 @@ class OIDCAuthentication:
 
         Parameters
         ----------
-        request : werkzeug.local.LocalProxy
+        request : flask.Request
             flask request object.
 
         Returns
@@ -358,7 +358,7 @@ class OIDCAuthentication:
 
         Parameters
         ----------
-        request : werkzeug.local.LocalProxy
+        request : flask.Request
             flask request object.
 
         Returns
@@ -380,17 +380,17 @@ class OIDCAuthentication:
 
         Parameters
         ----------
-        request : werkzeug.local.LocalProxy
+        request : flask.Request
             flask request object.
         client : flask_pyoidc.pyoidc_facade.PyoidcFacade
             PyoidcFacade object contains metadata of the provider and client.
-        scopes : list
-            Specify scopes that are bound for the end endpoint.
+        scopes : list, optional
+            Specify scopes required by your endpoint.
 
         Returns
         -------
-        bool
-            True if access_token is valid else False.
+        result: TokenIntrospectionResponse or None
+            If access_token is valid or None if invalid.
         """
         received_access_token = self._parse_access_token(request)
         # send token introspection request
@@ -426,20 +426,26 @@ class OIDCAuthentication:
 
         Raises
         ------
-        flask.abort(401)
-            If authorization field is missing.
-        flask.abort(403)
-            If the access token is invalid.
+        Unauthorized
+            flask.abort(401) if authorization field is missing.
+        Forbidden
+            flask.abort(403) if access token is invalid.
 
-        How To Use
-        ----------
-        >>> auth = OIDCAuthentication({'default': provider_config})
-        >>> @app.route('/')
+        Examples
+        --------
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config})
+            @app.route('/')
             @auth.token_auth(provider_name='default')
             def index():
                 ...
-        >>> # You can also specify scopes required by your endpoint.
-        >>> @auth.token_auth(provider_name='default',
+
+        You can also specify scopes required by the endpoint.
+
+        ::
+
+            @auth.token_auth(provider_name='default',
                              scopes_required=['read', 'write'])
         """
         def token_decorator(view_func):
@@ -485,18 +491,24 @@ class OIDCAuthentication:
 
         Raises
         ------
-        HTTPException
-            If the authorization is disabled.
+        Forbidden
+            If accesss_token is invalid.
 
-        How To Use
-        ----------
-        >>> auth = OIDCAuthentication({'default': provider_config})
-        >>> @app.route('/')
+        Examples
+        --------
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config})
+            @app.route('/')
             @auth.access_control(provider_name='default')
             def index():
                 ...
-        >>> # You can also specify scopes required by your endpoint.
-        >>> @auth.access_control(provider_name='default',
+
+        You can also specify scopes required by the endpoint:
+
+        ::
+
+            @auth.access_control(provider_name='default',
                                  scopes_required=['read', 'write'])
         """
         def hybrid_decorator(view_func):
