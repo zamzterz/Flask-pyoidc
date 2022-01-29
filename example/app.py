@@ -45,10 +45,10 @@ def login2():
                    userinfo=user_session.userinfo)
 
 
-@app.route('/index')
+@app.route('/api')
 @auth.token_auth(PROVIDER_NAME1,
                  scopes_required=['read', 'write'])
-def index():
+def api():
     current_token_identity = auth.current_token_identity
     return current_token_identity
 

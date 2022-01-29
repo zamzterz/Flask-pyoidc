@@ -1,12 +1,12 @@
 # Quickstart
 
+To add authentication to one of your endpoints create the `OIDCAuthentication` object:
+
 ```python
-import flask
-from flask import Flask, jsonify
+from flask import Flask
 
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration
-from flask_pyoidc.user_session import UserSession
 
 app = Flask(__name__)
 app.config.update(
@@ -22,26 +22,14 @@ client_metadata = ClientMetadata(
     client_secret='secret1',
     post_logout_redirect_uris=['https://example.com/logout'])
 
-# Static provider configuration
-# To use a provider not supporting dynamic discovery, the static provider
-# metadata can be specified:
-provider_metadata = ProviderMetadata(
-    issuer='https://idp.example.com',
-    authorization_endpoint='https://idp.example.com/auth',
-    token_endpoint='https://idp.example.com/token',
-    introspection_endpoint='https://idp.example.com/introspect',
-    userinfo_endpoint='https://idp.example.com/userinfo',
-    end_session_endpoint='https://idp.example.com/logout',
-    jwks_uri='https://idp.example.com/certs',
-    registration_endpoint='https://idp.example.com/registration')
 
-provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
+provider_config = ProviderConfiguration(issuer='<issuer URL of provider>',
                                         client_metadata=client_metadata)
 
 auth = OIDCAuthentication({'default': provider_config}, app)
 ```
 
-You can also use Flask application factory:
+You can also use a Flask application factory:
 ```python
 config = ProviderConfiguration(...)
 auth = OIDCAuthentication({'default': config})
@@ -56,11 +44,15 @@ def create_app():
     return app
 ```
 
-## OIDC
+## OpenID Connect
 
-To add authentication to your endpoints use the `oidc_auth` decorator:
+To add user authentication via an OpenID Connect provider to your endpoints use the `oidc_auth` decorator:
 ```python
-@app.route('/api')
+import flask
+from flask import jsonify
+from flask_pyoidc.user_session import UserSession
+
+@app.route('/')
 @auth.oidc_auth('default')
 def index():
     user_session = UserSession(flask.session)
@@ -69,13 +61,24 @@ def index():
                    userinfo=user_session.userinfo)
 ```
 
-## Token Based Authorization
+After a successful login, this extension will place three things in the user session (if they are received from the
+provider):
+* [ID Token](http://openid.net/specs/openid-connect-core-1_0.html#IDToken)
+* [Access Token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
+* [Userinfo Response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
 
-To add token based authorization to your endpoints use the `token_auth`
-decorator. It allows you to call your endpoint with curl and REST API clients
-given "Authorization Bearer <access_token>" field is present in the request
-header. Token based authorization is backed by token introspection so ensure
-that Identity Provider's introspection endpoint is provided.
+In addition to this documentation, you may have a look on a 
+[code example](https://github.com/zamzterz/Flask-pyoidc/tree/master/example).
+
+## Token-Based Authorization
+
+To add token-based authorization to your endpoints use the `token_auth`
+decorator. It authorizes requests to your endpoint with Bearer tokens in
+the `Authorization` header.
+
+The token-based authorization is backed by
+[token introspection](https://datatracker.ietf.org/doc/html/rfc7662)
+so make sure the Identity Provider's introspection endpoint is configured.
 ```python
 provider_metadata = ProviderMetadata(
     ...,
@@ -84,7 +87,7 @@ provider_metadata = ProviderMetadata(
 
 @app.route('/api')
 @auth.token_auth('default')
-def index():
+def api():
     current_token_identity = auth.current_token_identity
     ...
 
@@ -92,17 +95,24 @@ def index():
 @app.route('/api')
 @auth.token_auth('default',
                  scopes_required=['read', 'write'])
-def index():
+def api():
     current_token_identity = auth.current_token_identity
     ...
 ```
 To obtain information about the token, use `auth.current_token_identity` inside
-your endpoint. `current_token_identity` persists for current request only.
+your view function. `current_token_identity` persists for current request only.
 
-## OIDC & Token Based Authorization
+## Combined Authorization
 
-If you want to apply both oidc based authentication and token based
+If you want to apply both OIDC-based authentication and token-based
 authorization on your endpoint, you can use `access_control` decorator.
+Then the request will first be checked for a valid access token (in the `Authorization` header).
+If there is no token in the request it will fall back to the OIDC-based authentication mechanism.
+
+If there is a token in the request but it's invalid (e.g. expired, or missing required scopes) the request will
+be rejected with a `403 Forbidden` response.
+
+
 ```python
 # If you are using Static Provider Configuration, add introspection_endpoint
 # in ProviderMetadata.
@@ -113,19 +123,7 @@ provider_metadata = ProviderMetadata(
 
 @app.route('/api')
 @auth.access_control('default')
-def index():
-    current_identity = None
-    if auth.current_token_identity:
-        current_identity = auth.current_token_identity
-    else:
-        current_identity = UserSession(flask.session)
-    ...
-
-# Optionally, you can specify scopes required by your endpoint.
-@app.route('/api')
-@auth.access_control('default',
-                     scopes_required=['read', 'write'])
-def index():
+def api():
     current_identity = None
     if auth.current_token_identity:
         current_identity = auth.current_token_identity
@@ -133,17 +131,6 @@ def index():
         current_identity = UserSession(flask.session)
     ...
 ```
-
----
-
-After a successful login, this extension will place three things in the user session (if they are received from the
-provider):
-* [ID Token](http://openid.net/specs/openid-connect-core-1_0.html#IDToken)
-* [Access Token](http://openid.net/specs/openid-connect-core-1_0.html#TokenResponse)
-* [Userinfo Response](http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse)
-
-In addition to this documentation, you may have a look on a 
-[code example](https://github.com/zamzterz/Flask-pyoidc/tree/master/example).
 
 ## Using multiple providers
 
@@ -185,7 +172,7 @@ This extension also supports [RP-Initiated Logout](http://openid.net/specs/openi
 if the provider allows it. Make sure the `end_session_endpoint` is defined in the provider metadata to enable notifying
 the provider when the user logs out. 
 
-## Refreshing the access token
+## Refreshing the user access token
 
 If the provider returns a refresh token, this extension can use it to automatically refresh the access token when it
 has expired. Please see the helper method `OIDCAuthentication.valid_access_token()`.
@@ -208,3 +195,14 @@ to the [OIDC error parameters](http://openid.net/specs/openid-connect-core-1_0.h
 that should be displayed to the user.
 
 If no error view is specified, a generic error message will be displayed to the user.
+
+## Client Credentials Flow
+The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type can be used to obtain an
+access token for your service (outside the context of a user).
+
+Clients can obtain such an access token by using the `client_credentials_grant` method:
+
+```python
+token_response = auth.clients['default'].client_credentials_grant()
+access_token = token_response.get('access_token')
+```
