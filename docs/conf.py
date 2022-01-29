@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
 project = 'flask-pyoidc'
-copyright = '2019, Samuel Gulliksson'
+copyright = '2022, Samuel Gulliksson'
 author = 'Samuel Gulliksson'
 
 

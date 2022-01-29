@@ -12,6 +12,7 @@ If you have already registered a client with the provider, specify the client cr
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata
 
 client_metadata = ClientMetadata(client_id='client1', client_secret='secret1')
+provider_config = ProviderConfiguration(client_metadata=client_metadata, [provider_configuration])
 ```
 
 **Note: The redirect URIs registered with the provider MUST include the URI specified in
@@ -26,6 +27,7 @@ To dynamically register a new client for your application, the required client r
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
 
 client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'])
+provider_config = ProviderConfiguration(client_registration_info=client_registration_info, [provider_configuration])
 ```
 
 ## Provider configuration
@@ -36,15 +38,7 @@ To use a provider which supports dynamic discovery it suffices to specify the is
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration
 
-# If you are using Static Client Configuration, then specify client_metadata
-# as shown above.
-provider_config = ProviderConfiguration(issuer='https://idp.example.com',
-                                        client_metadata=client_metadata)
-
-# If you are using Dynamic Client Registration, then specify
-# client_registration_info as shown above.
-provider_config = ProviderConfiguration(issuer='https://idp.example.com',
-                                        client_registration_info=client_registration_info)
+provider_config = ProviderConfiguration(issuer='https://idp.example.com', [client configuration])
 ```
 
 ### Static provider configuration
@@ -60,17 +54,8 @@ provider_metadata = ProviderMetadata(issuer='https://idp.example.com',
                                      userinfo_endpoint='https://idp.example.com/userinfo',
                                      end_session_endpoint='https://idp.example.com/logout',
                                      jwks_uri='https://idp.example.com/certs',
-                                     registration_endpoint='https://idp.example.com/registration'
-                                     )
-# As shown earlier, if you are using Static Client Configuration, then specify
-# client_metadata.
-provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
-                                        client_metadata=client_metadata)
-
-# If you are using Dynamic Client Registration, then specify
-# client_registration_info.
-provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
-                                        client_registration_info=client_registration_info)
+                                     registration_endpoint='https://idp.example.com/registration')
+provider_config = ProviderConfiguration(provider_metadata=provider_metadata, [client configuration])
 ```
 
 See the OpenID Connect specification for more information about the
@@ -100,25 +85,6 @@ provier_config = ProviderConfiguration(session_refresh_interval_seconds=1800, [p
 ```
 
 **Note: The user will still be logged out when the session expires (as set in the Flask session configuration).**
-
-## Client Credentials Flow
-The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type is used by clients to obtain an access token outside of the context of a user.
-
-This is typically used by clients to access resources about themselves rather than to access a user's resources.
-
-Client can obtain access token by using `client_credentials_grant`.
-
-```python
-auth = OIDCAuthentication({'default': provider_config}, app)
-
-client_credentials_response = auth.clients['default'].client_credentials_grant()
-access_token = resp.get('access_token')
-```
-
-Use the obtained `access_token` to access your web service APIs.
-If your API endpoints are protected with `@auth.token_auth` or
-`@auth.access_control`, `access_token` will be verfied by token introspection
-before allowing access.
 
 ## Flask configuration
 
