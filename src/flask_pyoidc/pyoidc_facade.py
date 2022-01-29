@@ -261,12 +261,14 @@ class PyoidcFacade:
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
 
-        How To Use
-        ----------
-        >>> auth = OIDCAuthentication({'default': provider_config},
+        Examples
+        --------
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config},
                                       access_token_required=True)
-        >>> auth.init_app(app)
-        >>> auth.clients['default'].client_credentials_grant()
+            auth.init_app(app)
+            auth.clients['default'].client_credentials_grant()
         """
         client_credentials_payload = {
             'grant_type': 'client_credentials'

@@ -433,14 +433,19 @@ class OIDCAuthentication:
 
         Examples
         --------
-        >>> auth = OIDCAuthentication({'default': provider_config})
-        >>> @app.route('/')
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config})
+            @app.route('/')
             @auth.token_auth(provider_name='default')
             def index():
                 ...
-        You can also specify scopes required by your endpoint.
 
-        >>> @auth.token_auth(provider_name='default',
+        You can also specify scopes required by the endpoint.
+
+        ::
+
+            @auth.token_auth(provider_name='default',
                              scopes_required=['read', 'write'])
         """
         def token_decorator(view_func):
@@ -491,15 +496,19 @@ class OIDCAuthentication:
 
         Examples
         --------
-        >>> auth = OIDCAuthentication({'default': provider_config})
-        >>> @app.route('/')
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config})
+            @app.route('/')
             @auth.access_control(provider_name='default')
             def index():
                 ...
 
-        You can also specify scopes required by your endpoint.
+        You can also specify scopes required by the endpoint:
 
-        >>> @auth.access_control(provider_name='default',
+        ::
+
+            @auth.access_control(provider_name='default',
                                  scopes_required=['read', 'write'])
         """
         def hybrid_decorator(view_func):
