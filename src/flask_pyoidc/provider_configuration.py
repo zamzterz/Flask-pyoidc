@@ -1,6 +1,8 @@
 import collections.abc
 import logging
 
+from oic.oic import Client
+from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 import requests
 
 logger = logging.getLogger(__name__)
@@ -57,19 +59,35 @@ class OIDCData(collections.abc.MutableMapping):
 
 
 class ProviderMetadata(OIDCData):
-    def __init__(self, issuer=None, authorization_endpoint=None, jwks_uri=None, **kwargs):
-        """
-        Args:
-            issuer (str): OP Issuer Identifier.
-            authorization_endpoint (str): URL of the OP's Authorization Endpoint
-            jwks_uri (str): URL of the OP's JSON Web Key Set
-            kwargs (dict): key-value pairs corresponding to
-                `OpenID Provider Metadata`_
 
-        .. _OpenID Provider Metadata:
-            https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+    def __init__(self, issuer=None, authorization_endpoint=None, token_endpoint=None,
+                 userinfo_endpoint=None, jwks_uri=None, introspection_endpoint=None,
+                 registration_endpoint=None, **kwargs):
+        """OpenID Providers have metadata describing their configuration.
+
+        Parameters
+        ----------
+        issuer: str, Optional
+            OP Issuer Identifier.
+        authorization_endpoint: str, Optional
+            URL of the OP's OAuth 2.0 Authorization Endpoint.
+        token_endpoint: str, Optional
+            URL of the OP's OAuth 2.0 Token Endpoint.
+        userinfo_endpoint: str, Optional
+            URL of the OP's UserInfo Endpoint.
+        jwks_uri: str, Optional
+            URL of the OP's JSON Web Key Set [JWK] document.
+        introspection_endpoint: str, Optional
+            URL of the OP's token introspection endpoint.
+        registration_endpoint: str, Optional
+            URL of the OP's Dynamic Client Registration Endpoint.
+        **kwargs : dict, Optional
+            Extra arguments to [OpenID Provider Metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata)
         """
-        super(ProviderMetadata, self).__init__(issuer=issuer, authorization_endpoint=authorization_endpoint, jwks_uri=jwks_uri, **kwargs)
+        super().__init__(issuer=issuer, authorization_endpoint=authorization_endpoint,
+                         token_endpoint=token_endpoint, userinfo_endpoint=userinfo_endpoint,
+                         jwks_uri=jwks_uri, introspection_endpoint=introspection_endpoint,
+                         registration_endpoint=registration_endpoint, **kwargs)
 
 
 class ClientRegistrationInfo(OIDCData):
@@ -149,6 +167,8 @@ class ProviderConfiguration:
 
         self.requests_session = requests_session or requests.Session()
 
+        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
+
     def ensure_provider_metadata(self):
         if not self._provider_metadata:
             resp = self.requests_session \
@@ -175,11 +195,12 @@ class ProviderConfiguration:
             if extra_parameters:
                 registration_request.update(extra_parameters)
 
-            resp = self.requests_session \
-                .post(self._provider_metadata['registration_endpoint'],
-                      json=registration_request,
-                      timeout=self.DEFAULT_REQUEST_TIMEOUT)
-            self._client_metadata = ClientMetadata(redirect_uris=redirect_uris, **resp.json())
+            registration_response = self._client.register(
+                url=self._provider_metadata['registration_endpoint'],
+                registration_token=registration_request.get('initial_access_token'),
+                **registration_request)
+            logger.debug(registration_response.to_dict())
+            self._client_metadata = ClientMetadata(**registration_response.to_dict())
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata

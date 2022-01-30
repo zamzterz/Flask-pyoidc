@@ -29,6 +29,9 @@ from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientReg
 client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'])
 provider_config = ProviderConfiguration(client_registration_info=client_registration_info, [provider_configuration])
 ```
+You can set any Client Metadata parameters that the Client chooses to specify for itself during the registration. For
+complete list of keyword arguments, see [Client Metadata](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata).
+Also refer to [Client Registration Request](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationRequest) example.
 
 ## Provider configuration
 
