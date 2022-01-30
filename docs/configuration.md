@@ -26,12 +26,23 @@ To dynamically register a new client for your application, the required client r
 ```python
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
 
-client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'])
+client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'],
+                                                  registration_token='initial_access_token')
 provider_config = ProviderConfiguration(client_registration_info=client_registration_info, [provider_configuration])
 ```
-You can set any Client Metadata parameters that the Client chooses to specify for itself during the registration. For
-complete list of keyword arguments, see [Client Metadata](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata).
-Also refer to [Client Registration Request](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationRequest) example.
+Identity Providers support two ways how new clients can be registered through Client Registration Service.
+
+1. Authenticated requests - Request to register new client must contain `Initial Access Token`. If you want to use this
+method then you must provide `registration_token` keyword argument to `ClientRegistrationInfo`. You can obtain this
+token from your identity provider.
+
+2. Anonymous requests - Request to register new client doesn't need to contain any token at all.
+
+You can set any Client Metadata parameters for `ClientRegistrationInfo` during the registration. For complete list of
+keyword arguments, see [Client Metadata](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata).
+Also refer to
+[Client Registration Request](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationRequest)
+example.
 
 ## Provider configuration
 

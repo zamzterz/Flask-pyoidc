@@ -192,15 +192,13 @@ class ProviderConfiguration:
 
             registration_request = self._client_registration_info.to_dict()
             registration_request['redirect_uris'] = redirect_uris
-            if extra_parameters:
-                registration_request.update(extra_parameters)
 
             registration_response = self._client.register(
                 url=self._provider_metadata['registration_endpoint'],
-                registration_token=registration_request.get('initial_access_token'),
                 **registration_request)
             logger.debug(registration_response.to_dict())
-            self._client_metadata = ClientMetadata(**registration_response.to_dict())
+            self._client_metadata = ClientMetadata(**registration_response.to_dict(),
+                                                   **extra_parameters)
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata

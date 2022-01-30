@@ -57,7 +57,9 @@ class TestProviderConfiguration(object):
     @responses.activate
     def test_should_register_dynamic_client_if_client_registration_info_is_given(self):
         registration_endpoint = self.PROVIDER_BASEURL + '/register'
-        responses.add(responses.POST, registration_endpoint, json={'client_id': 'client1', 'client_secret': 'secret1'})
+        responses.add(responses.POST, registration_endpoint, json={
+            'client_id': 'client1', 'client_secret': 'secret1',
+            'redirect_uris': ['https://client.example.com/redirect']})
 
         provider_config = ProviderConfiguration(
             provider_metadata=self.provider_metadata(registration_endpoint=registration_endpoint),
@@ -69,10 +71,7 @@ class TestProviderConfiguration(object):
         assert provider_config._client_metadata['client_id'] == 'client1'
         assert provider_config._client_metadata['client_secret'] == 'secret1'
         assert provider_config._client_metadata['redirect_uris'] == redirect_uris
-
-        expected_registration_request = {'redirect_uris': redirect_uris}
-        expected_registration_request.update(extra_args)
-        assert json.loads(responses.calls[0].request.body.decode('utf-8')) == expected_registration_request
+        assert provider_config._client_metadata['extra_args'] == 'should be passed'
 
     def test_should_not_register_dynamic_client_if_client_metadata_is_given(self):
         client_metadata = ClientMetadata(client_id='client1',
@@ -88,7 +87,35 @@ class TestProviderConfiguration(object):
                                                 client_registration_info=ClientRegistrationInfo())
         with pytest.raises(ValueError) as exc_info:
             provider_config.register_client([])
-        assert 'registration_endpoint' in str(exc_info.value)
+
+    @responses.activate
+    def test_register_client_should_register_dynamic_client_if_initial_access_token_present(self):
+
+        registration_endpoint = self.PROVIDER_BASEURL + '/register'
+        client_registration_response = {
+            'redirect_uris': ['https://client.example.com/redirect'],
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'registration_client_uri': 'https://op.example.com/register/client1',
+            'registration_access_token': 'registration_access_token1'
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
+        provider_config = ProviderConfiguration(
+            provider_metadata=self.provider_metadata(registration_endpoint=registration_endpoint),
+            client_registration_info=ClientRegistrationInfo(client_name='Test Client'))
+
+        extra_args = {'extra_args': 'should be passed'}
+        redirect_uris = ['https://client.example.com/redirect']
+        provider_config.register_client(redirect_uris, extra_args)
+
+        assert provider_config._client_metadata['client_id'] == 'client1'
+        assert provider_config._client_metadata['client_secret'] == 'secret1'
+        assert provider_config._client_metadata['client_name'] == 'Test Client'
+        assert provider_config._client_metadata['registration_client_uri'] == 'https://op.example.com/register/client1'
+        assert provider_config._client_metadata['registration_access_token'] == 'registration_access_token1'
+        assert provider_config._client_metadata['redirect_uris'] == redirect_uris
+        assert provider_config._client_metadata['extra_args'] == 'should be passed'
 
 
 class TestOIDCData(object):
