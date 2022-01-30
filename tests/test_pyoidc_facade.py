@@ -46,7 +46,15 @@ class TestPyoidcFacade:
     @responses.activate
     def test_register(self):
         registration_endpoint = self.PROVIDER_BASEURL + '/register'
-        responses.add(responses.POST, registration_endpoint, json=self.CLIENT_METADATA.to_dict())
+        client_registration_response = {
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'redirect_uris': ['https://rp.example.com/redirect_uri'],
+            'registration_client_uri': 'https://op.example.com/register/client1',
+            'registration_access_token': 'registration_access_token1'
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
 
         provider_metadata = self.PROVIDER_METADATA.copy(registration_endpoint=registration_endpoint)
         unregistered = ProviderConfiguration(provider_metadata=provider_metadata,

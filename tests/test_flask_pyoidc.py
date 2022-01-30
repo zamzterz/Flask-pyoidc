@@ -162,19 +162,14 @@ class TestOIDCAuthentication:
         self.app.add_url_rule('/logout', view_func=logout_view_mock)
         authn.oidc_logout(logout_view_mock)
 
-        responses.add(responses.POST, registration_endpoint, json={'client_id': 'client1', 'client_secret': 'secret1'})
+        responses.add(responses.POST, registration_endpoint, json={
+            'client_id': 'client1', 'client_secret': 'secret1',
+            'redirect_uris': ['https://client.example.com/redirect']})
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
             auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
 
         self.assert_auth_redirect(auth_redirect)
-        registration_request = json.loads(responses.calls[0].request.body.decode('utf-8'))
-        expected_post_logout_redirect_uris = post_logout_redirect_uris if post_logout_redirect_uris else ['http://{}/logout'.format(self.CLIENT_DOMAIN)]
-        expected_registration_request = {
-            'redirect_uris': ['http://{}/redirect_uri'.format(self.CLIENT_DOMAIN)],
-            'post_logout_redirect_uris': expected_post_logout_redirect_uris
-        }
-        assert registration_request == expected_registration_request
 
     @patch('time.time')
     @patch('oic.utils.time_util.utc_time_sans_frac')  # used internally by pyoidc when verifying ID Token

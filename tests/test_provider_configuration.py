@@ -93,10 +93,10 @@ class TestProviderConfiguration(object):
 
         registration_endpoint = self.PROVIDER_BASEURL + '/register'
         client_registration_response = {
-            'redirect_uris': ['https://client.example.com/redirect'],
             'client_id': 'client1',
             'client_secret': 'secret1',
             'client_name': 'Test Client',
+            'redirect_uris': ['https://client.example.com/redirect'],
             'registration_client_uri': 'https://op.example.com/register/client1',
             'registration_access_token': 'registration_access_token1'
         }
