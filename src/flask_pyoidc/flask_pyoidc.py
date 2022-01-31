@@ -108,17 +108,19 @@ class OIDCAuthentication:
             url_for_logout_view = self._get_url_for_logout_view()
             if url_for_logout_view:
                 return [url_for_logout_view]
-            return []
 
-        client_registration_args = {}
-        post_logout_redirect_uris = client._provider_configuration._client_registration_info.get('post_logout_redirect_uris')
-        if post_logout_redirect_uris:
-            client_registration_args['post_logout_redirect_uris'] = post_logout_redirect_uris
-        else:
-            client_registration_args['post_logout_redirect_uris'] = default_post_logout_redirect_uris()
-
-        logger.debug('registering with post_logout_redirect_uris=%s', client_registration_args['post_logout_redirect_uris'])
-        client.register(client_registration_args)
+        # Check if the user has passed post_logout_redirect_uris in ClientRegistrationInfo.
+        post_logout_redirect_uris = client._provider_configuration._client_registration_info.get(
+            'post_logout_redirect_uris')
+        # If not passed, try to resolve it by using logout view function.
+        if not post_logout_redirect_uris:
+            _default_post_logout_redirect_uris = default_post_logout_redirect_uris()
+            # If it's resolved, set this as an attribute of ClientRegistrationInfo.
+            if _default_post_logout_redirect_uris:
+                client._provider_configuration._client_registration_info[
+                    'post_logout_redirect_uris'] = _default_post_logout_redirect_uris
+        logger.debug('registering with post_logout_redirect_uris=%s', post_logout_redirect_uris)
+        client.register()
 
     def _authenticate(self, client, interactive=True):
         if not client.is_registered():

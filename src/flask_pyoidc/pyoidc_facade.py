@@ -69,8 +69,8 @@ class PyoidcFacade:
     def is_registered(self):
         return bool(self._provider_configuration.registered_client_metadata)
 
-    def register(self, extra_registration_params=None):
-        client_metadata = self._provider_configuration.register_client([self._redirect_uri], extra_registration_params)
+    def register(self):
+        client_metadata = self._provider_configuration.register_client(self._client, self._redirect_uri)
         logger.debug('client registration response: %s', client_metadata)
         self._client.store_registration_info(RegistrationResponse(**client_metadata.to_dict()))
 

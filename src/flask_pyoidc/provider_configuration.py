@@ -2,7 +2,6 @@ import collections.abc
 import logging
 
 from oic.oic import Client
-from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 import requests
 
 logger = logging.getLogger(__name__)
@@ -118,7 +117,7 @@ class ProviderConfiguration:
         session_refresh_interval_seconds (int): Number of seconds between updates of user data (tokens, user data, etc.)
             fetched from the provider. If `None` is specified, no silent updates should be made user data will be made.
         userinfo_endpoint_method (str): HTTP method ("GET" or "POST") to use when making the UserInfo Request. If
-            `None` is specifed, no UserInfo Request will be made.
+            `None` is specified, no UserInfo Request will be made.
     """
 
     DEFAULT_REQUEST_TIMEOUT = 5
@@ -167,8 +166,6 @@ class ProviderConfiguration:
 
         self.requests_session = requests_session or requests.Session()
 
-        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
-
     def ensure_provider_metadata(self):
         if not self._provider_metadata:
             resp = self.requests_session \
@@ -184,24 +181,45 @@ class ProviderConfiguration:
     def registered_client_metadata(self):
         return self._client_metadata
 
-    def register_client(self, redirect_uris, extra_parameters=None):
+    def register_client(self, client: Client, redirect_uri: str):
 
-        if not extra_parameters:
-            extra_parameters = {}
         if not self._client_metadata:
             if 'registration_endpoint' not in self._provider_metadata:
                 raise ValueError("Can't use dynamic client registration, provider metadata is missing "
                                  "'registration_endpoint'.")
 
             registration_request = self._client_registration_info.to_dict()
-            registration_request['redirect_uris'] = redirect_uris
+            # Check if the user has passed list of redirect_uris in ClientRegistrationInfo.
+            if 'redirect_uris' not in registration_request:
+                # If not, create it.
+                registration_request['redirect_uris'] = [redirect_uri]
+            # if it's passed, check if it's type list.
+            elif not isinstance(registration_request['redirect_uris'], list):
+                raise ValueError('redirect_uris must be a list, not str.')
+            else:
+                # Add redirect_uri into the list of redirect_uris passed by
+                # the user in ClientRegistrationInfo.
+                registration_request['redirect_uris'].append(redirect_uri)
+            post_logout_redirect_uris = []
+            # Check if post_logout_redirect_uris exists.
+            if 'post_logout_redirect_uris' in registration_request:
+                post_logout_redirect_uris = registration_request['post_logout_redirect_uris']
+                # If it exists, add this into the list of redirect_uris.
+                registration_request['redirect_uris'].extend(post_logout_redirect_uris)
+            # Remove duplicate redirect_uris from the list.
+            registration_request['redirect_uris'] = list(set(registration_request['redirect_uris']))
 
-            registration_response = self._client.register(
+            # Send request to register the client dynamically.
+            registration_response = client.register(
                 url=self._provider_metadata['registration_endpoint'],
                 **registration_request)
             logger.debug(registration_response.to_dict())
-            self._client_metadata = ClientMetadata(**registration_response.to_dict(),
-                                                   **extra_parameters)
+            # post_logout_redirect_uris is not returned to the request so
+            # explicitly provide this as a keyword argument to initialise
+            # ClientMetadata.
+            self._client_metadata = ClientMetadata(
+                **registration_response.to_dict(),
+                post_logout_redirect_uris=post_logout_redirect_uris)
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata
