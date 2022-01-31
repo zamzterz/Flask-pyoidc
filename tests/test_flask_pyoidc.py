@@ -75,13 +75,14 @@ class TestOIDCAuthentication:
         assert result == self.CALLBACK_RETURN_VALUE
 
     def test_explicit_redirect_uri_config_should_be_preferred(self):
-        redirect_uri_config = RedirectUriConfig('https://example.com/abc/redirect_uri', 'redirect_uri')
-        assert OIDCAuthentication({}, self.app, redirect_uri_config)._redirect_uri_config == redirect_uri_config
+        redirect_uri_config = RedirectUriConfig('https://example.com/api/redirect_uri', 'api/redirect_uri')
+        assert OIDCAuthentication(
+            {}, self.app, 'https://example.com/api/redirect_uri')._redirect_uri_config == redirect_uri_config
 
     def test_explicit_redirect_uri_config_should_be_preserved_after_init_app(self):
-        redirect_uri_config = RedirectUriConfig('https://example.com/abc/redirect_uri', 'redirect_uri')
-        authn = OIDCAuthentication({}, None, redirect_uri_config)
-        assert authn._redirect_uri_config == redirect_uri_config
+        redirect_uri_config = RedirectUriConfig('https://example.com/api/redirect_uri', 'api/redirect_uri')
+        authn = OIDCAuthentication({}, None, 'https://example.com/api/redirect_uri')
+        assert authn._redirect_uri_config == redirect_uri_config.full_uri
         authn.init_app(self.app)
         assert authn._redirect_uri_config == redirect_uri_config
 
