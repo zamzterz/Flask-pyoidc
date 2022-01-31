@@ -73,12 +73,8 @@ class OIDCAuthentication:
             self.init_app(app)
 
     def init_app(self, app):
-
         if not self._redirect_uri_config:
             self._redirect_uri_config = RedirectUriConfig.from_config(app.config)
-        else:
-            self._redirect_uri_config = RedirectUriConfig(*RedirectUriConfig._parse_redirect_uri(
-                self._redirect_uri_config))
 
         # setup redirect_uri as a flask route
         app.add_url_rule('/' + self._redirect_uri_config.endpoint,
