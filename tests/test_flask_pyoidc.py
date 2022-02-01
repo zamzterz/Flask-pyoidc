@@ -454,6 +454,40 @@ class TestOIDCAuthentication:
         assert parsed_request['post_logout_redirect_uri'] == expected_post_logout_redirect_uri
         assert not logout_view_mock.called
 
+    @patch('flask.helpers.url_for', return_value=f'http://{CLIENT_DOMAIN}/custom-logout')
+    def test_oidc_logout_when_custom_logout_view_function_configured(self, post_logout_custom_redirect_uri):
+
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        custom_logout_view_function = 'test_callback'
+        client_metadata = {}
+        authn = self.init_app(provider_metadata_extras={'end_session_endpoint': end_session_endpoint},
+                              client_metadata_extras=client_metadata)
+        logout_view_mock = self.get_view_mock()
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+
+        # register logout view
+        view_func = authn.oidc_logout(custom_logout_view_function)(logout_view_mock)
+        self.app.add_url_rule('/custom-logout', view_func=logout_view_mock)
+
+        with self.app.test_request_context('/logout'):
+            UserSession(flask.session, self.PROVIDER_NAME).update(access_token='test_access_token',
+                                                                  id_token=id_token.to_dict(),
+                                                                  id_token_jwt=id_token.to_jwt(),
+                                                                  userinfo={'sub': 'user1'})
+            end_session_redirect = view_func()
+
+            # ensure user session has been cleared
+            assert all(k not in flask.session for k in UserSession.KEYS)
+            parsed_request = dict(parse_qsl(urlparse(end_session_redirect.headers['Location']).query))
+            assert parsed_request['state'] == flask.session['end_session_state']
+
+        assert end_session_redirect.status_code == 303
+        assert end_session_redirect.location.startswith(end_session_endpoint)
+        assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
+
+        expected_post_custom_logout_redirect_uri = f'http://{self.CLIENT_DOMAIN}/custom-logout'
+        assert parsed_request['post_logout_redirect_uri'] == expected_post_custom_logout_redirect_uri
+
     def test_logout_with_missing_end_session_state_fails_gracefully(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         authn = self.init_app(provider_metadata_extras={'end_session_endpoint': end_session_endpoint})

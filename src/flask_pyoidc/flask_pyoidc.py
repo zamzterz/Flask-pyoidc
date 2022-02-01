@@ -88,7 +88,10 @@ class OIDCAuthentication:
             for (name, configuration) in self._provider_configurations.items()
         }
 
-    def _get_post_logout_redirect_uri(self, client):
+    def _get_post_logout_redirect_uri(self, client, view_func_name=None):
+
+        if view_func_name:
+            return url_for(view_func_name, _external=True)
         if client.post_logout_redirect_uris:
             return client.post_logout_redirect_uris[0]
         return self._get_url_for_logout_view()
@@ -244,11 +247,11 @@ class OIDCAuthentication:
 
         return oidc_decorator
 
-    def _logout(self):
+    def _logout(self, view_func_name):
         logger.debug('user logout')
         try:
             session = UserSession(flask.session)
-        except UninitialisedSession as e:
+        except UninitialisedSession:
             logger.info('user was already logged out, doing nothing')
             return None
 
@@ -259,33 +262,47 @@ class OIDCAuthentication:
         if client.provider_end_session_endpoint:
             flask.session['end_session_state'] = rndstr()
 
-            end_session_request = EndSessionRequest(id_token_hint=id_token_jwt,
-                                                    post_logout_redirect_uri=self._get_post_logout_redirect_uri(client),
-                                                    state=flask.session['end_session_state'])
+            end_session_request = EndSessionRequest(
+                id_token_hint=id_token_jwt,
+                post_logout_redirect_uri=self._get_post_logout_redirect_uri(client, view_func_name),
+                state=flask.session['end_session_state'])
 
             logger.debug('send endsession request: %s', end_session_request.to_json())
 
             return redirect(end_session_request.request(client.provider_end_session_endpoint), 303)
         return None
 
-    def oidc_logout(self, view_func):
-        self._logout_view = view_func
+    def oidc_logout(self, arg=None):
 
-        @functools.wraps(view_func)
-        def wrapper(*args, **kwargs):
-            if 'state' in flask.request.args:
-                # returning redirect from provider
-                if flask.request.args['state'] != flask.session.pop('end_session_state', None):
-                    logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
+        def logout_decorator(view_func):
+
+            self._logout_view = view_func
+
+            @functools.wraps(view_func)
+            def wrapper(*args, **kwargs):
+                if 'state' in flask.request.args:
+                    # returning redirect from provider
+                    if flask.request.args['state'] != flask.session.pop('end_session_state', None):
+                        logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
+                    return view_func(*args, **kwargs)
+
+                redirect_to_provider = self._logout(arg)
+                if redirect_to_provider:
+                    return redirect_to_provider
+
                 return view_func(*args, **kwargs)
 
-            redirect_to_provider = self._logout()
-            if redirect_to_provider:
-                return redirect_to_provider
+            return wrapper
 
-            return view_func(*args, **kwargs)
+        # For backward compatibility and to support decorator with or without
+        # arguments, check if it's callable.
+        if callable(arg):
+            view_func = arg
+            # Set arg to None if it's callable.
+            arg = None
+            return logout_decorator(view_func)
 
-        return wrapper
+        return logout_decorator
 
     def error_view(self, view_func):
         self._error_view = view_func
