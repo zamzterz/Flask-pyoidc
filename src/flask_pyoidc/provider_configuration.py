@@ -184,7 +184,7 @@ class ProviderConfiguration:
     def register_client(self, client: Client, redirect_uri: str):
 
         if not self._client_metadata:
-            if 'registration_endpoint' not in self._provider_metadata:
+            if not self._provider_metadata['registration_endpoint']:
                 raise ValueError("Can't use dynamic client registration, provider metadata is missing "
                                  "'registration_endpoint'.")
 
