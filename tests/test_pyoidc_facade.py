@@ -1,7 +1,5 @@
-import time
-
 import base64
-import unittest
+import time
 
 import pytest
 import responses
@@ -19,9 +17,9 @@ REDIRECT_URI = 'https://rp.example.com/redirect_uri'
 
 class TestPyoidcFacade:
     PROVIDER_BASEURL = 'https://op.example.com'
-    PROVIDER_METADATA = ProviderMetadata(PROVIDER_BASEURL,
-                                         PROVIDER_BASEURL + '/auth',
-                                         PROVIDER_BASEURL + '/jwks')
+    PROVIDER_METADATA = ProviderMetadata(issuer=PROVIDER_BASEURL,
+                                         authorization_endpoint=PROVIDER_BASEURL + '/auth',
+                                         jwks_uri=PROVIDER_BASEURL + '/jwks')
     CLIENT_METADATA = ClientMetadata('client1', 'secret1')
 
     def test_registered_client_metadata_is_forwarded_to_pyoidc(self):

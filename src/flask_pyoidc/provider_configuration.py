@@ -59,9 +59,9 @@ class OIDCData(collections.abc.MutableMapping):
 
 class ProviderMetadata(OIDCData):
 
-    def __init__(self, issuer=None, authorization_endpoint=None, token_endpoint=None,
-                 userinfo_endpoint=None, jwks_uri=None, introspection_endpoint=None,
-                 registration_endpoint=None, **kwargs):
+    def __init__(self, issuer=None, authorization_endpoint=None, jwks_uri=None,
+                 token_endpoint=None, userinfo_endpoint=None,
+                 introspection_endpoint=None, registration_endpoint=None, **kwargs):
         """OpenID Providers have metadata describing their configuration.
 
         Parameters
@@ -70,12 +70,12 @@ class ProviderMetadata(OIDCData):
             OP Issuer Identifier.
         authorization_endpoint: str, Optional
             URL of the OP's OAuth 2.0 Authorization Endpoint.
+        jwks_uri: str, Optional
+            URL of the OP's JSON Web Key Set [JWK] document.
         token_endpoint: str, Optional
             URL of the OP's OAuth 2.0 Token Endpoint.
         userinfo_endpoint: str, Optional
             URL of the OP's UserInfo Endpoint.
-        jwks_uri: str, Optional
-            URL of the OP's JSON Web Key Set [JWK] document.
         introspection_endpoint: str, Optional
             URL of the OP's token introspection endpoint.
         registration_endpoint: str, Optional
