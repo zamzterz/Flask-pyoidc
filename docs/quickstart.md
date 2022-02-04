@@ -205,4 +205,8 @@ Clients can obtain such an access token by using the `client_credentials_grant` 
 ```python
 token_response = auth.clients['default'].client_credentials_grant()
 access_token = token_response.get('access_token')
+
+# Optionally, you can also specify scope for the access token.
+token_response = auth.clients['default'].client_credentials_grant(
+    scope=['read', 'write'])
 ```
