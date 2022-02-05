@@ -8,6 +8,7 @@ dist/
 .coverage*
 coverage.xml
 .pytest_cache
+.scannerwork
 .venv/
 docs/_build
 docs/_static

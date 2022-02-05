@@ -31,6 +31,7 @@ class TestRedirectUriConfig(object):
         redirect_uri_config = RedirectUriConfig.from_config(config)
         assert redirect_uri_config.full_uri == 'https://myexample.com:6000/callback'
         assert redirect_uri_config.endpoint == 'callback'
+        assert repr(redirect_uri_config) == f'({redirect_uri_config.full_uri}, {redirect_uri_config.endpoint})'
 
     def test_should_raise_if_missing_all_config(self):
         with pytest.raises(ValueError) as exc_info:

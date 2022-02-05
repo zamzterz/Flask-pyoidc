@@ -15,6 +15,7 @@ from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
 from werkzeug.exceptions import Forbidden, Unauthorized
+from werkzeug.routing import BuildError
 
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
@@ -885,3 +886,25 @@ class TestOIDCAuthentication:
                 scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
             assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+
+    def test_get_url_for_logout_view(self):
+
+        authn = self.init_app()
+        assert authn._get_url_for_logout_view() is None
+        logout_view_mock = self.get_view_mock()
+        authn.oidc_logout(logout_view_mock)
+        self.app.add_url_rule('/logout', view_func=logout_view_mock)
+        with self.app.test_request_context('/'):
+            assert authn._get_url_for_logout_view() == f'http://{self.CLIENT_DOMAIN}/logout'
+
+    def test_get_url_for_logout_view_should_raise_build_error_if_mounted_under_custom_endpoint(self):
+
+        authn = self.init_app()
+        logout_view_mock = self.get_view_mock()
+        authn.oidc_logout(logout_view_mock)
+        blueprint = flask.Blueprint('api', __name__)
+        blueprint.add_url_rule('/auth/logout', view_func=logout_view_mock)
+        self.app.register_blueprint(blueprint)
+        with pytest.raises(BuildError):
+            with self.app.test_request_context('/'):
+                assert authn._get_url_for_logout_view()
