@@ -908,3 +908,37 @@ class TestOIDCAuthentication:
         with pytest.raises(BuildError):
             with self.app.test_request_context('/'):
                 assert authn._get_url_for_logout_view()
+
+    @responses.activate
+    def test_register_client_should_resolve_post_logout_redirect_uris_if_not_passed(self):
+
+        registration_endpoint = self.PROVIDER_BASEURL + '/register'
+        provider_metadata = ProviderMetadata(self.PROVIDER_BASEURL,
+                                             self.PROVIDER_BASEURL + '/auth',
+                                             self.PROVIDER_BASEURL + '/jwks',
+                                             registration_endpoint=registration_endpoint)
+        provider_configurations = {
+            self.PROVIDER_NAME: ProviderConfiguration(provider_metadata=provider_metadata,
+                                                      client_registration_info=ClientRegistrationInfo())
+        }
+        authn = OIDCAuthentication(provider_configurations)
+        authn.init_app(self.app)
+
+        logout_view_mock = self.get_view_mock()
+        authn.oidc_logout(logout_view_mock)
+        self.app.add_url_rule('/logout', view_func=logout_view_mock)
+
+        client_registration_response = {
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'redirect_uris': ['https://client.example.com/redirect', 'https://client.example.com/logout'],
+            'registration_client_uri': 'https://op.example.com/register/client1',
+            'registration_access_token': 'registration_access_token1'
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
+        client = authn.clients[self.PROVIDER_NAME]
+        with self.app.test_request_context('/'):
+            authn._register_client(authn.clients[self.PROVIDER_NAME])
+        assert client._provider_configuration.registered_client_metadata.to_dict()[
+                   'post_logout_redirect_uris'] == [f'http://{self.CLIENT_DOMAIN}/logout']
