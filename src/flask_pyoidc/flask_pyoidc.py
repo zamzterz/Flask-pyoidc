@@ -59,7 +59,7 @@ class OIDCAuthentication:
         self._provider_configurations = provider_configurations
 
         self.clients = None
-        self._logout_view = None
+        self._logout_views = []
         self._error_view = None
         # current_token_identity proxy to obtain user info whose token was
         # passed in the request. It is available until current request only and
@@ -88,42 +88,22 @@ class OIDCAuthentication:
             for (name, configuration) in self._provider_configurations.items()
         }
 
-    def _get_post_logout_redirect_uri(self, client):
-        if client.post_logout_redirect_uris:
-            return client.post_logout_redirect_uris[0]
-        return self._get_url_for_logout_view()
-
-    def _get_url_for_logout_view(self):
-        if not self._logout_view:
-            return None
-
+    def _get_urls_for_logout_views(self):
         try:
-            return url_for(self._logout_view.__name__, _external=True)
+            return [url_for(view.__name__, _external=True) for view in self._logout_views]
         except BuildError:
             logger.error('could not build url for logout view, it might be mounted under a custom endpoint')
             raise
 
     def _register_client(self, client):
-        def default_post_logout_redirect_uris():
-            url_for_logout_view = self._get_url_for_logout_view()
-            if url_for_logout_view:
-                return [url_for_logout_view]
-            return []
-
-        # Check if the user has passed list of redirect_uris in ClientRegistrationInfo.
         if not client._provider_configuration._client_registration_info.get('redirect_uris'):
-            # If not, create it.
             client._provider_configuration._client_registration_info[
                 'redirect_uris'] = [self._redirect_uri_config.full_uri]
-        # Check if the user has passed post_logout_redirect_uris in ClientRegistrationInfo.
         post_logout_redirect_uris = client._provider_configuration._client_registration_info.get(
             'post_logout_redirect_uris')
         if not post_logout_redirect_uris:
-            # If not passed, try to resolve it by using logout view function.
-            _default_post_logout_redirect_uris = default_post_logout_redirect_uris()
-            # Set this as an attribute of ClientRegistrationInfo.
             client._provider_configuration._client_registration_info[
-                'post_logout_redirect_uris'] = _default_post_logout_redirect_uris
+                'post_logout_redirect_uris'] = self._get_urls_for_logout_views()
         logger.debug(
             f'''registering with post_logout_redirect_uris = {
                 client._provider_configuration._client_registration_info[
@@ -254,7 +234,7 @@ class OIDCAuthentication:
 
         return oidc_decorator
 
-    def _logout(self):
+    def _logout(self, view_func):
         logger.debug('user logout')
         try:
             session = UserSession(flask.session)
@@ -269,8 +249,9 @@ class OIDCAuthentication:
         if client.provider_end_session_endpoint:
             flask.session['end_session_state'] = rndstr()
 
+            post_logout_uri = url_for(view_func.__name__, _external=True)
             end_session_request = EndSessionRequest(id_token_hint=id_token_jwt,
-                                                    post_logout_redirect_uri=self._get_post_logout_redirect_uri(client),
+                                                    post_logout_redirect_uri=post_logout_uri,
                                                     state=flask.session['end_session_state'])
 
             logger.debug('send endsession request: %s', end_session_request.to_json())
@@ -279,7 +260,7 @@ class OIDCAuthentication:
         return None
 
     def oidc_logout(self, view_func):
-        self._logout_view = view_func
+        self._logout_views.append(view_func)
 
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
@@ -289,7 +270,7 @@ class OIDCAuthentication:
                     logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
                 return view_func(*args, **kwargs)
 
-            redirect_to_provider = self._logout()
+            redirect_to_provider = self._logout(view_func)
             if redirect_to_provider:
                 return redirect_to_provider
 
