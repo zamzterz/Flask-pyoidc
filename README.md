@@ -14,3 +14,32 @@ This Flask extension provides simple OpenID Connect authentication, backed by [p
 ## Getting started
 Read [the documentation](https://flask-pyoidc.readthedocs.io/) or have a look at the
 [example Flask app](example/app.py) for a full example of how to use this extension.
+
+Below is a basic example of how to get started:
+```python
+app = Flask(__name__)
+app.config.update(
+    OIDC_REDIRECT_URI = 'https://example.com/redirect_uri',
+    SECRET_KEY = ...
+)
+
+# Static Client Registration
+client_metadata = ClientMetadata(
+    client_id='client1',
+    client_secret='secret1',
+    post_logout_redirect_uris=['https://example.com/logout'])
+
+
+provider_config = ProviderConfiguration(issuer='<issuer URL of provider>',
+                                        client_metadata=client_metadata)
+
+auth = OIDCAuthentication({'default': provider_config}, app)
+
+@app.route('/')
+@auth.oidc_auth('default') # endpoint will require login
+def index():
+    user_session = UserSession(flask.session)
+    return jsonify(access_token=user_session.access_token,
+                   id_token=user_session.id_token,
+                   userinfo=user_session.userinfo)
+```
