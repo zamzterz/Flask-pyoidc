@@ -258,8 +258,7 @@ class TestPyoidcFacade:
             'token_type': 'Bearer'}
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
-        assert client_credentials_grant_response == facade.client_credentials_grant(
-            scope=['read', 'write']).to_dict()
+        assert client_credentials_grant_response == facade.client_credentials_grant().to_dict()
 
 
 class TestClientAuthentication(object):
