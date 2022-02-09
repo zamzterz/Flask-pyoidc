@@ -277,7 +277,7 @@ class PyoidcFacade:
             auth.init_app(app)
             auth.clients['default'].client_credentials_grant()
 
-        Optionally, you can also specify scope for the access token.
+        Optionally, you can specify scopes for the access token.
 
         ::
 
