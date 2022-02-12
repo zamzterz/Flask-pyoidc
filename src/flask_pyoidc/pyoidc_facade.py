@@ -3,8 +3,9 @@ import json
 import logging
 
 from oic.extension.client import Client as ClientExtension
+from oic.extension.message import TokenIntrospectionResponse
 from oic.oic import Client, RegistrationResponse, AuthorizationResponse, \
-    AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse
+    AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse, OpenIDSchema
 from oic.oic.message import ProviderConfigurationResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
@@ -220,10 +221,12 @@ class PyoidcFacade:
             return None
 
         logger.debug('making userinfo request')
-        userinfo_response = self._client.do_user_info_request(method=http_method, token=access_token)
-        logger.debug('received userinfo response: %s', userinfo_response.to_json())
+        userinfo_response = self._provider_configuration.requests_session \
+            .request(http_method, self._client.userinfo_endpoint, headers={'Authorization': f'Bearer {access_token}'}) \
+            .json()
+        logger.debug('received userinfo response: %s', userinfo_response)
 
-        return userinfo_response
+        return OpenIDSchema(**userinfo_response)
 
     def _token_introspection_request(self, access_token: str):
         """Make token introspection request.
@@ -238,20 +241,20 @@ class PyoidcFacade:
         oic.extension.message.TokenIntrospectionResponse
             Response object contains result of the token introspection.
         """
-        args = {
+        request = {
             'token': access_token,
-            'client_id': self._client.client_id,
-            'client_secret': self._client.client_secret
+            'token_type_hint': 'access_token'
         }
-        token_introspection_request = self._client_extension.construct_TokenIntrospectionRequest(
-            request_args=args
-        )
+        auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)('client_secret_basic',
+                                                                                                request)
         logger.info('making token introspection request')
-        return self._client_extension.do_token_introspection(
-            request_args=token_introspection_request,
-            endpoint=self._client.introspection_endpoint)
+        response = self._provider_configuration.requests_session \
+            .post(self._client.introspection_endpoint, data=request, headers=auth_header) \
+            .json()
 
-    def client_credentials_grant(self):
+        return TokenIntrospectionResponse(**response)
+
+    def client_credentials_grant(self, scope: list = None, **kwargs):
         """Public method to request access_token using client_credentials flow.
         This is useful for service to service communication where user-agent is
         not available which is required in authorization code flow. Your
@@ -261,6 +264,13 @@ class PyoidcFacade:
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
 
+        Parameters
+        ----------
+        scope: list, optional
+            List of scopes to be requested.
+        **kwargs : dict, optional
+            Extra arguments to client credentials flow.
+
         Examples
         --------
         ::
@@ -269,11 +279,28 @@ class PyoidcFacade:
                                       access_token_required=True)
             auth.init_app(app)
             auth.clients['default'].client_credentials_grant()
+
+        Optionally, you can specify scopes for the access token.
+
+        ::
+
+            auth.clients['default'].client_credentials_grant(
+                scope=['read', 'write'])
+
+        You can also specify extra keyword arguments to client credentials flow.
+
+        ::
+
+            auth.clients['default'].client_credentials_grant(
+                scope=['read', 'write'], audience=['client_id1', 'client_id2'])
         """
-        client_credentials_payload = {
-            'grant_type': 'client_credentials'
+        request = {
+            'grant_type': 'client_credentials',
+            **kwargs
         }
-        return self._token_request(request=client_credentials_payload)
+        if scope:
+            request['scope'] = ' '.join(scope)
+        return self._token_request(request)
 
     @property
     def session_refresh_interval_seconds(self):
