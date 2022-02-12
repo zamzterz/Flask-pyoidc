@@ -251,7 +251,7 @@ class PyoidcFacade:
             request_args=token_introspection_request,
             endpoint=self._client.introspection_endpoint)
 
-    def client_credentials_grant(self):
+    def client_credentials_grant(self, scope: list = None, **kwargs):
         """Public method to request access_token using client_credentials flow.
         This is useful for service to service communication where user-agent is
         not available which is required in authorization code flow. Your
@@ -261,6 +261,13 @@ class PyoidcFacade:
         On API call, token introspection will ensure that only valid token can
         be used to access your APIs.
 
+        Parameters
+        ----------
+        scope: list, optional
+            List of scopes to be requested.
+        **kwargs : dict, optional
+            Extra arguments to client credentials flow.
+
         Examples
         --------
         ::
@@ -269,10 +276,24 @@ class PyoidcFacade:
                                       access_token_required=True)
             auth.init_app(app)
             auth.clients['default'].client_credentials_grant()
+
+        Optionally, you can specify scopes for the access token.
+
+        ::
+
+            auth.clients['default'].client_credentials_grant(
+                scope=['read', 'write'])
+
+        You can also specify extra keyword arguments to client credentials flow.
+
+        ::
+
+            auth.clients['default'].client_credentials_grant(
+                scope=['read', 'write'], audience=['client_id1', 'client_id2'])
         """
-        client_credentials_payload = {
-            'grant_type': 'client_credentials'
-        }
+        client_credentials_payload = dict(grant_type='client_credentials', **kwargs)
+        if scope:
+            client_credentials_payload['scope'] = ' '.join(scope)
         return self._token_request(request=client_credentials_payload)
 
     @property
