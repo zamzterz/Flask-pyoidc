@@ -234,7 +234,8 @@ class TestPyoidcFacade:
         assert facade.userinfo_request(None) is None
 
     @responses.activate
-    def test_client_credentials_grant(self):
+    @pytest.mark.parametrize('scope', [None, ['read', 'write']])
+    def test_client_credentials_grant(self, scope):
         token_endpoint = f'{self.PROVIDER_BASEURL}/token'
         provider_metadata = self.PROVIDER_METADATA.copy(
             token_endpoint=token_endpoint)
@@ -253,7 +254,7 @@ class TestPyoidcFacade:
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
         assert client_credentials_grant_response == facade.client_credentials_grant(
-            scope=['read', 'write'], audience=['client_id1, client_id2']).to_dict()
+            scope=scope, audience=['client_id1, client_id2']).to_dict()
 
 
 class TestClientAuthentication(object):
