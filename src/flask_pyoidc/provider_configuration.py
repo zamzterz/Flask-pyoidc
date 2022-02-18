@@ -59,9 +59,15 @@ class OIDCData(collections.abc.MutableMapping):
 
 class ProviderMetadata(OIDCData):
 
-    def __init__(self, issuer=None, authorization_endpoint=None, jwks_uri=None,
-                 token_endpoint=None, userinfo_endpoint=None,
-                 introspection_endpoint=None, registration_endpoint=None, **kwargs):
+    def __init__(self,
+                 issuer=None,
+                 authorization_endpoint=None,
+                 jwks_uri=None,
+                 token_endpoint=None,
+                 userinfo_endpoint=None,
+                 introspection_endpoint=None,
+                 registration_endpoint=None,
+                 **kwargs):
         """OpenID Providers have metadata describing their configuration.
 
         Parameters
@@ -181,7 +187,7 @@ class ProviderConfiguration:
     def registered_client_metadata(self):
         return self._client_metadata
 
-    def register_client(self, client: Client, redirect_uri: str):
+    def register_client(self, client: Client):
 
         if not self._client_metadata:
             if not self._provider_metadata['registration_endpoint']:
@@ -189,22 +195,11 @@ class ProviderConfiguration:
                                  "'registration_endpoint'.")
 
             registration_request = self._client_registration_info.to_dict()
-            # Check if the user has passed list of redirect_uris in ClientRegistrationInfo.
-            if 'redirect_uris' not in registration_request:
-                # If not, create it.
-                registration_request['redirect_uris'] = [redirect_uri]
-            # if it's passed, check if it's type list.
-            elif not isinstance(registration_request['redirect_uris'], list):
-                raise ValueError('redirect_uris must be a list, not str.')
-            else:
-                # Add redirect_uri into the list of redirect_uris passed by
-                # the user in ClientRegistrationInfo.
-                registration_request['redirect_uris'].append(redirect_uri)
-            post_logout_redirect_uris = []
-            # Check if post_logout_redirect_uris exists.
-            if 'post_logout_redirect_uris' in registration_request:
-                post_logout_redirect_uris = registration_request['post_logout_redirect_uris']
-                # If it exists, add this into the list of redirect_uris.
+            # IdPs register all redirect URIs from redirect_uris parameter so
+            # post_logout_redirect_uris should be added to the redirect_uris
+            # parameter.
+            post_logout_redirect_uris = registration_request['post_logout_redirect_uris']
+            if post_logout_redirect_uris:
                 registration_request['redirect_uris'].extend(post_logout_redirect_uris)
             # Remove duplicate redirect_uris from the list.
             registration_request['redirect_uris'] = list(set(registration_request['redirect_uris']))

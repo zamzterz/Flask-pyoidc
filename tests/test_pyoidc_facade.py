@@ -49,14 +49,15 @@ class TestPyoidcFacade:
             'client_secret': 'secret1',
             'client_name': 'Test Client',
             'redirect_uris': ['https://rp.example.com/redirect_uri'],
-            'registration_client_uri': 'https://op.example.com/register/client1',
-            'registration_access_token': 'registration_access_token1'
         }
         responses.add(responses.POST, registration_endpoint, json=client_registration_response)
 
         provider_metadata = self.PROVIDER_METADATA.copy(registration_endpoint=registration_endpoint)
         unregistered = ProviderConfiguration(provider_metadata=provider_metadata,
-                                             client_registration_info=ClientRegistrationInfo())
+                                             client_registration_info=ClientRegistrationInfo(
+                                                 redirect_uris=['https://client.example.com/redirect'],
+                                                 post_logout_redirect_uris=['https://client.example.com/logout']
+                                             ))
         facade = PyoidcFacade(unregistered, REDIRECT_URI)
         facade.register()
         assert facade.is_registered() is True
