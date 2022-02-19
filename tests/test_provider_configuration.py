@@ -1,4 +1,5 @@
-import json
+import base64
+
 import pytest
 import responses
 
@@ -134,6 +135,8 @@ class TestProviderConfiguration:
                                                                      'https://client.example.com/logout']
         assert provider_config._client_metadata[
                    'post_logout_redirect_uris'] == post_logout_redirect_uris
+        assert responses.calls[0].request.headers['Authorization'] == \
+               f"Bearer {base64.b64encode('initial_access_token'.encode()).decode()}"
 
     @responses.activate
     def test_register_client_should_register_client_even_if_post_logout_redirect_uris_missing(self):
