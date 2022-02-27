@@ -201,12 +201,14 @@ class ProviderConfiguration:
                 url=self._provider_metadata['registration_endpoint'],
                 **registration_request)
             logger.debug(registration_response.to_dict())
-            # post_logout_redirect_uris is not returned to the request so
-            # explicitly provide this as a keyword argument to initialise
-            # ClientMetadata.
+            # Some IdPs may not return post_logout_redirect_uris to the
+            # response so explicitly patch the response to take
+            # post_logout_redirect_uris from the code. Even if it does exist
+            # in the response, it will be replaced.
+            registration_response['post_logout_redirect_uris'] = registration_request[
+                'post_logout_redirect_uris']
             self._client_metadata = ClientMetadata(
-                **registration_response.to_dict(),
-                post_logout_redirect_uris=registration_request['post_logout_redirect_uris'])
+                **registration_response.to_dict())
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata

@@ -164,10 +164,13 @@ class TestOIDCAuthentication:
         self.app.add_url_rule('/logout', view_func=logout_view_mock)
         authn.oidc_logout(logout_view_mock)
 
+        expected_post_logout_redirect_uris = post_logout_redirect_uris if post_logout_redirect_uris else \
+            [f'http://{self.CLIENT_DOMAIN}/logout']
         responses.add(responses.POST, registration_endpoint, json={
             'client_id': 'client1', 'client_secret': 'secret1',
             'redirect_uris': [f'https://{self.CLIENT_DOMAIN}/redirect',
-                              f'https://{self.CLIENT_DOMAIN}/redirect2']})
+                              f'https://{self.CLIENT_DOMAIN}/redirect2'],
+            'post_logout_redirect_uris': expected_post_logout_redirect_uris})
         view_mock = self.get_view_mock()
         with self.app.test_request_context('/'):
             auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
@@ -175,8 +178,6 @@ class TestOIDCAuthentication:
         self.assert_auth_redirect(auth_redirect)
 
         registration_request = json.loads(responses.calls[0].request.body)
-        expected_post_logout_redirect_uris = post_logout_redirect_uris if post_logout_redirect_uris else \
-            [f'http://{self.CLIENT_DOMAIN}/logout']
         expected_registration_request = {'application_type': 'web', 'response_types': ['code'],
                                          'redirect_uris': [f'https://{self.CLIENT_DOMAIN}/redirect',
                                                            f'https://{self.CLIENT_DOMAIN}/redirect2'],
@@ -248,6 +249,8 @@ class TestOIDCAuthentication:
             auth_redirect = authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
 
         self.assert_auth_redirect(auth_redirect)
+        assert authn.clients[self.PROVIDER_NAME]._provider_configuration._client_metadata.get(
+            'post_logout_redirect_uris') is None
 
         registration_request = json.loads(responses.calls[0].request.body)
         expected_registration_request = {'application_type': 'web', 'response_types': ['code'],
