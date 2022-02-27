@@ -27,9 +27,17 @@ To dynamically register a new client for your application, the required client r
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo
 
 client_registration_info = ClientRegistrationInfo(client_name='Test App', contacts=['dev@example.com'],
+                                                  redirect_uris=['https://client.example.com/redirect',
+                                                                 'https://client.example.com/redirect2'],
+                                                  post_logout_redirect_uris=['https://client.example.com/logout',
+                                                                             'https://client.example.com/logout2]
                                                   registration_token='initial_access_token')
 provider_config = ProviderConfiguration(client_registration_info=client_registration_info, [provider_configuration])
 ```
+
+> Note: To register all redirect_uris and post_logout_redirect_uris with the provider, you must provide them as a list
+>       in their respective keyword arguments.
+
 Identity Providers support two ways how new clients can be registered through Client Registration Service.
 
 1. Authenticated requests - Request to register new client must contain `Initial Access Token`. If you want to use this

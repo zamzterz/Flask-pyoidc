@@ -124,7 +124,10 @@ class OIDCAuthentication:
             # Set this as an attribute of ClientRegistrationInfo.
             client._provider_configuration._client_registration_info[
                 'post_logout_redirect_uris'] = _default_post_logout_redirect_uris
-        logger.debug('registering with post_logout_redirect_uris=%s', post_logout_redirect_uris)
+        logger.debug(
+            f'''registering with post_logout_redirect_uris = {
+                client._provider_configuration._client_registration_info[
+                    'post_logout_redirect_uris']}''')
         client.register()
 
     def _authenticate(self, client, interactive=True):

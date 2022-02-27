@@ -195,14 +195,6 @@ class ProviderConfiguration:
                                  "'registration_endpoint'.")
 
             registration_request = self._client_registration_info.to_dict()
-            # IdPs register all redirect URIs from redirect_uris parameter so
-            # post_logout_redirect_uris should be added to the redirect_uris
-            # parameter.
-            post_logout_redirect_uris = registration_request['post_logout_redirect_uris']
-            if post_logout_redirect_uris:
-                registration_request['redirect_uris'].extend(post_logout_redirect_uris)
-            # Remove duplicate redirect_uris from the list.
-            registration_request['redirect_uris'] = list(set(registration_request['redirect_uris']))
 
             # Send request to register the client dynamically.
             registration_response = client.register(
@@ -214,7 +206,7 @@ class ProviderConfiguration:
             # ClientMetadata.
             self._client_metadata = ClientMetadata(
                 **registration_response.to_dict(),
-                post_logout_redirect_uris=post_logout_redirect_uris)
+                post_logout_redirect_uris=registration_request['post_logout_redirect_uris'])
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata
