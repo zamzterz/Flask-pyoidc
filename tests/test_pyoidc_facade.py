@@ -1,7 +1,5 @@
-import time
-
 import base64
-import unittest
+import time
 
 import pytest
 import responses
@@ -19,9 +17,9 @@ REDIRECT_URI = 'https://rp.example.com/redirect_uri'
 
 class TestPyoidcFacade:
     PROVIDER_BASEURL = 'https://op.example.com'
-    PROVIDER_METADATA = ProviderMetadata(PROVIDER_BASEURL,
-                                         PROVIDER_BASEURL + '/auth',
-                                         PROVIDER_BASEURL + '/jwks')
+    PROVIDER_METADATA = ProviderMetadata(issuer=PROVIDER_BASEURL,
+                                         authorization_endpoint=PROVIDER_BASEURL + '/auth',
+                                         jwks_uri=PROVIDER_BASEURL + '/jwks')
     CLIENT_METADATA = ClientMetadata('client1', 'secret1')
 
     def test_registered_client_metadata_is_forwarded_to_pyoidc(self):
@@ -46,11 +44,23 @@ class TestPyoidcFacade:
     @responses.activate
     def test_register(self):
         registration_endpoint = self.PROVIDER_BASEURL + '/register'
-        responses.add(responses.POST, registration_endpoint, json=self.CLIENT_METADATA.to_dict())
+        redirect_uris = ['https://client.example.com/redirect']
+        post_logout_redirect_uris = ['https://client.example.com/logout']
+        client_registration_response = {
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'redirect_uris': redirect_uris,
+            'post_logout_redirect_uris': post_logout_redirect_uris
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
 
         provider_metadata = self.PROVIDER_METADATA.copy(registration_endpoint=registration_endpoint)
         unregistered = ProviderConfiguration(provider_metadata=provider_metadata,
-                                             client_registration_info=ClientRegistrationInfo())
+                                             client_registration_info=ClientRegistrationInfo(
+                                                 redirect_uris=redirect_uris,
+                                                 post_logout_redirect_uris=post_logout_redirect_uris
+                                             ))
         facade = PyoidcFacade(unregistered, REDIRECT_URI)
         facade.register()
         assert facade.is_registered() is True
@@ -234,7 +244,8 @@ class TestPyoidcFacade:
         assert facade.userinfo_request(None) is None
 
     @responses.activate
-    def test_client_credentials_grant(self):
+    @pytest.mark.parametrize('scope', [None, ['read', 'write']])
+    def test_client_credentials_grant(self, scope):
         token_endpoint = f'{self.PROVIDER_BASEURL}/token'
         provider_metadata = self.PROVIDER_METADATA.copy(
             token_endpoint=token_endpoint)
@@ -252,7 +263,8 @@ class TestPyoidcFacade:
             'token_type': 'Bearer'}
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
-        assert client_credentials_grant_response == facade.client_credentials_grant().to_dict()
+        assert client_credentials_grant_response == facade.client_credentials_grant(
+            scope=scope, audience=['client_id1, client_id2']).to_dict()
 
 
 class TestClientAuthentication(object):

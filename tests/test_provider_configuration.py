@@ -1,15 +1,19 @@
-import json
+import base64
+
 import pytest
 import responses
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo, ProviderMetadata, \
     ClientMetadata, OIDCData
+from oic.oic import Client
+from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
 
-class TestProviderConfiguration(object):
+class TestProviderConfiguration:
     PROVIDER_BASEURL = 'https://op.example.com'
 
-    def provider_metadata(self, **kwargs):
+    @staticmethod
+    def provider_metadata(**kwargs):
         return ProviderMetadata(issuer='', authorization_endpoint='', jwks_uri='', **kwargs)
 
     def test_missing_provider_metadata_raises_exception(self):
@@ -57,41 +61,114 @@ class TestProviderConfiguration(object):
     @responses.activate
     def test_should_register_dynamic_client_if_client_registration_info_is_given(self):
         registration_endpoint = self.PROVIDER_BASEURL + '/register'
-        responses.add(responses.POST, registration_endpoint, json={'client_id': 'client1', 'client_secret': 'secret1'})
+        redirect_uris = ['https://client.example.com/redirect',
+                         'https://client.example.com/redirect2']
+        post_logout_redirect_uris = ['https://client.example.com/logout']
+        responses.add(responses.POST, registration_endpoint, json={
+            'client_id': 'client1', 'client_secret': 'secret1',
+            'redirect_uris': redirect_uris,
+            'post_logout_redirect_uris': post_logout_redirect_uris})
 
         provider_config = ProviderConfiguration(
             provider_metadata=self.provider_metadata(registration_endpoint=registration_endpoint),
-            client_registration_info=ClientRegistrationInfo())
+            client_registration_info=ClientRegistrationInfo(
+                redirect_uris=redirect_uris,
+                post_logout_redirect_uris=post_logout_redirect_uris))
 
-        extra_args = {'extra_args': 'should be passed'}
-        redirect_uris = ['https://client.example.com/redirect']
-        provider_config.register_client(redirect_uris, extra_args)
+        provider_config.register_client(Client(CLIENT_AUTHN_METHOD))
         assert provider_config._client_metadata['client_id'] == 'client1'
         assert provider_config._client_metadata['client_secret'] == 'secret1'
         assert provider_config._client_metadata['redirect_uris'] == redirect_uris
-
-        expected_registration_request = {'redirect_uris': redirect_uris}
-        expected_registration_request.update(extra_args)
-        assert json.loads(responses.calls[0].request.body.decode('utf-8')) == expected_registration_request
+        assert provider_config._client_metadata[
+                   'post_logout_redirect_uris'] == post_logout_redirect_uris
 
     def test_should_not_register_dynamic_client_if_client_metadata_is_given(self):
         client_metadata = ClientMetadata(client_id='client1',
-                                         client_secret='secret1',
-                                         redirect_uris=['https://client.example.com/redirect'])
+                                         client_secret='secret1')
         provider_config = ProviderConfiguration(provider_metadata=self.provider_metadata(),
                                                 client_metadata=client_metadata)
-        provider_config.register_client([])
+        provider_config.register_client(None)
         assert provider_config._client_metadata == client_metadata
 
     def test_should_raise_exception_for_non_registered_client_when_missing_registration_endpoint(self):
         provider_config = ProviderConfiguration(provider_metadata=self.provider_metadata(),
                                                 client_registration_info=ClientRegistrationInfo())
-        with pytest.raises(ValueError) as exc_info:
-            provider_config.register_client([])
-        assert 'registration_endpoint' in str(exc_info.value)
+        assert provider_config._provider_metadata['registration_endpoint'] is None
+        with pytest.raises(ValueError):
+            provider_config.register_client(None)
+
+    @responses.activate
+    def test_register_client_should_register_dynamic_client_if_initial_access_token_present(self):
+
+        registration_endpoint = self.PROVIDER_BASEURL + '/register'
+        redirect_uris = ['https://client.example.com/redirect',
+                         'https://client.example.com/redirect2']
+        post_logout_redirect_uris = ['https://client.example.com/logout']
+        client_registration_response = {
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'redirect_uris': redirect_uris,
+            'post_logout_redirect_uris': post_logout_redirect_uris,
+            'registration_client_uri': 'https://op.example.com/register/client1',
+            'registration_access_token': 'registration_access_token1'
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
+        provider_config = ProviderConfiguration(
+            provider_metadata=self.provider_metadata(registration_endpoint=registration_endpoint),
+            client_registration_info=ClientRegistrationInfo(
+                client_name='Test Client',
+                redirect_uris=redirect_uris,
+                post_logout_redirect_uris=post_logout_redirect_uris,
+                registration_token='initial_access_token'))
+
+        provider_config.register_client(Client(CLIENT_AUTHN_METHOD))
+
+        assert provider_config._client_metadata['client_id'] == 'client1'
+        assert provider_config._client_metadata['client_secret'] == 'secret1'
+        assert provider_config._client_metadata['client_name'] == 'Test Client'
+        assert provider_config._client_metadata['registration_client_uri'] == 'https://op.example.com/register/client1'
+        assert provider_config._client_metadata['registration_access_token'] == 'registration_access_token1'
+        assert provider_config._client_metadata['redirect_uris'] == redirect_uris
+        assert provider_config._client_metadata[
+                   'post_logout_redirect_uris'] == post_logout_redirect_uris
+        assert responses.calls[0].request.headers['Authorization'] == \
+               f"Bearer {base64.b64encode('initial_access_token'.encode()).decode()}"
+
+    @responses.activate
+    def test_register_client_should_register_client_even_if_post_logout_redirect_uris_missing(self):
+        registration_endpoint = self.PROVIDER_BASEURL + '/register'
+        redirect_uris = ['https://client.example.com/redirect',
+                         'https://client.example.com/redirect2']
+        client_registration_response = {
+            'client_id': 'client1',
+            'client_secret': 'secret1',
+            'client_name': 'Test Client',
+            'redirect_uris': redirect_uris,
+            'registration_client_uri': 'https://op.example.com/register/client1',
+            'registration_access_token': 'registration_access_token1'
+        }
+        responses.add(responses.POST, registration_endpoint, json=client_registration_response)
+        provider_config = ProviderConfiguration(
+            provider_metadata=self.provider_metadata(registration_endpoint=registration_endpoint),
+            client_registration_info=ClientRegistrationInfo(
+                client_name='Test Client',
+                redirect_uris=redirect_uris,
+                post_logout_redirect_uris=[],
+                registration_token='initial_access_token'))
+
+        provider_config.register_client(client=Client(CLIENT_AUTHN_METHOD))
+
+        assert provider_config._client_metadata['client_id'] == 'client1'
+        assert provider_config._client_metadata['client_secret'] == 'secret1'
+        assert provider_config._client_metadata['client_name'] == 'Test Client'
+        assert provider_config._client_metadata['registration_client_uri'] == 'https://op.example.com/register/client1'
+        assert provider_config._client_metadata['registration_access_token'] == 'registration_access_token1'
+        assert provider_config._client_metadata['redirect_uris'] == redirect_uris
+        assert provider_config._client_metadata.get('post_logout_redirect_uris') is None
 
 
-class TestOIDCData(object):
+class TestOIDCData:
     def test_client_secret_should_not_be_in_string_representation(self):
         client_secret = 'secret123456'
         client_metadata = OIDCData(client_id='client1', client_secret=client_secret)
@@ -102,3 +179,9 @@ class TestOIDCData(object):
         data = OIDCData(abc='xyz')
         copy_data = data.copy(qwe='rty', abc='123')
         assert copy_data == {'abc': '123', 'qwe': 'rty'}
+
+    def test_del_and_len(self):
+        data = OIDCData(abc='xyz', qwe='rty')
+        assert len(data) == 2
+        data.__delitem__('qwe')
+        assert data.to_dict() == {'abc': 'xyz'}

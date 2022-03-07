@@ -1,6 +1,7 @@
 import collections.abc
 import logging
 
+from oic.oic import Client
 import requests
 
 logger = logging.getLogger(__name__)
@@ -57,19 +58,41 @@ class OIDCData(collections.abc.MutableMapping):
 
 
 class ProviderMetadata(OIDCData):
-    def __init__(self, issuer=None, authorization_endpoint=None, jwks_uri=None, **kwargs):
-        """
-        Args:
-            issuer (str): OP Issuer Identifier.
-            authorization_endpoint (str): URL of the OP's Authorization Endpoint
-            jwks_uri (str): URL of the OP's JSON Web Key Set
-            kwargs (dict): key-value pairs corresponding to
-                `OpenID Provider Metadata`_
 
-        .. _OpenID Provider Metadata:
-            https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+    def __init__(self,
+                 issuer=None,
+                 authorization_endpoint=None,
+                 jwks_uri=None,
+                 token_endpoint=None,
+                 userinfo_endpoint=None,
+                 introspection_endpoint=None,
+                 registration_endpoint=None,
+                 **kwargs):
+        """OpenID Providers have metadata describing their configuration.
+
+        Parameters
+        ----------
+        issuer: str, Optional
+            OP Issuer Identifier.
+        authorization_endpoint: str, Optional
+            URL of the OP's OAuth 2.0 Authorization Endpoint.
+        jwks_uri: str, Optional
+            URL of the OP's JSON Web Key Set [JWK] document.
+        token_endpoint: str, Optional
+            URL of the OP's OAuth 2.0 Token Endpoint.
+        userinfo_endpoint: str, Optional
+            URL of the OP's UserInfo Endpoint.
+        introspection_endpoint: str, Optional
+            URL of the OP's token introspection endpoint.
+        registration_endpoint: str, Optional
+            URL of the OP's Dynamic Client Registration Endpoint.
+        **kwargs : dict, Optional
+            Extra arguments to [OpenID Provider Metadata](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata)
         """
-        super(ProviderMetadata, self).__init__(issuer=issuer, authorization_endpoint=authorization_endpoint, jwks_uri=jwks_uri, **kwargs)
+        super().__init__(issuer=issuer, authorization_endpoint=authorization_endpoint,
+                         token_endpoint=token_endpoint, userinfo_endpoint=userinfo_endpoint,
+                         jwks_uri=jwks_uri, introspection_endpoint=introspection_endpoint,
+                         registration_endpoint=registration_endpoint, **kwargs)
 
 
 class ClientRegistrationInfo(OIDCData):
@@ -100,7 +123,7 @@ class ProviderConfiguration:
         session_refresh_interval_seconds (int): Number of seconds between updates of user data (tokens, user data, etc.)
             fetched from the provider. If `None` is specified, no silent updates should be made user data will be made.
         userinfo_endpoint_method (str): HTTP method ("GET" or "POST") to use when making the UserInfo Request. If
-            `None` is specifed, no UserInfo Request will be made.
+            `None` is specified, no UserInfo Request will be made.
     """
 
     DEFAULT_REQUEST_TIMEOUT = 5
@@ -164,22 +187,21 @@ class ProviderConfiguration:
     def registered_client_metadata(self):
         return self._client_metadata
 
-    def register_client(self, redirect_uris, extra_parameters=None):
+    def register_client(self, client: Client):
+
         if not self._client_metadata:
-            if 'registration_endpoint' not in self._provider_metadata:
+            if not self._provider_metadata['registration_endpoint']:
                 raise ValueError("Can't use dynamic client registration, provider metadata is missing "
                                  "'registration_endpoint'.")
 
             registration_request = self._client_registration_info.to_dict()
-            registration_request['redirect_uris'] = redirect_uris
-            if extra_parameters:
-                registration_request.update(extra_parameters)
 
-            resp = self.requests_session \
-                .post(self._provider_metadata['registration_endpoint'],
-                      json=registration_request,
-                      timeout=self.DEFAULT_REQUEST_TIMEOUT)
-            self._client_metadata = ClientMetadata(redirect_uris=redirect_uris, **resp.json())
+            # Send request to register the client dynamically.
+            registration_response = client.register(
+                url=self._provider_metadata['registration_endpoint'],
+                **registration_request)
+            self._client_metadata = ClientMetadata(
+                **registration_response.to_dict())
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
 
         return self._client_metadata

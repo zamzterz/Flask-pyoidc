@@ -200,9 +200,16 @@ If no error view is specified, a generic error message will be displayed to the 
 The [Client Credentials](https://tools.ietf.org/html/rfc6749#section-4.4) grant type can be used to obtain an
 access token for your service (outside the context of a user).
 
-Clients can obtain such an access token by using the `client_credentials_grant` method:
+You can obtain such an access token by using the `client_credentials_grant` method:
 
 ```python
 token_response = auth.clients['default'].client_credentials_grant()
 access_token = token_response.get('access_token')
+
+# Optionally, you can specify scopes for the access token.
+auth.clients['default'].client_credentials_grant(
+    scope=['read', 'write'])
+# You can also specify extra keyword arguments to client credentials flow.
+auth.clients['default'].client_credentials_grant(
+    scope=['read', 'write'], audience=['client_id1', 'client_id2'])
 ```
