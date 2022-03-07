@@ -35,22 +35,21 @@ client_registration_info = ClientRegistrationInfo(client_name='Test App', contac
 provider_config = ProviderConfiguration(client_registration_info=client_registration_info, [provider_configuration])
 ```
 
-> Note: To register all redirect_uris and post_logout_redirect_uris with the provider, you must provide them as a list
->       in their respective keyword arguments.
+**Note: To register all `redirect_uris` and `post_logout_redirect_uris` with the provider,
+you must provide them as a list in their respective keyword arguments.**
 
-Identity Providers support two ways how new clients can be registered through Client Registration Service.
+Identity Providers support two ways how new clients can be registered through Dynamic Client Registration:
 
-1. Authenticated requests - Request to register new client must contain `Initial Access Token`. If you want to use this
-method then you must provide `registration_token` keyword argument to `ClientRegistrationInfo`. You can obtain this
-token from your identity provider.
+1. Authenticated requests - the registration request must contain an "initial access token" obtained from your
+identity provider.
+If you want to use this method then you must provide `registration_token` keyword argument to `ClientRegistrationInfo`.
 
-2. Anonymous requests - Request to register new client doesn't need to contain any token at all.
+2. Anonymous requests - the registration request doesn't need to contain any token.
 
-You can set any Client Metadata parameters for `ClientRegistrationInfo` during the registration. For complete list of
+You can set any Client Metadata parameters for `ClientRegistrationInfo` during the registration. For a complete list of
 keyword arguments, see [Client Metadata](https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata).
-Also refer to
-[Client Registration Request](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationRequest)
-example.
+Also refer to the
+[Client Registration Request example](https://openid.net/specs/openid-connect-registration-1_0.html#RegistrationRequest).
 
 ## Provider configuration
 
