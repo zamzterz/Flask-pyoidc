@@ -60,4 +60,3 @@ class RedirectUriConfig:
         full_uri = scheme + '://' + redirect_domain + '/' + endpoint
 
         return full_uri, endpoint
-
