@@ -200,7 +200,6 @@ class ProviderConfiguration:
             registration_response = client.register(
                 url=self._provider_metadata['registration_endpoint'],
                 **registration_request)
-            logger.debug(registration_response.to_dict())
             self._client_metadata = ClientMetadata(
                 **registration_response.to_dict())
             logger.debug('Received registration response: client_id=' + self._client_metadata['client_id'])
