@@ -60,7 +60,7 @@ class TestOIDCAuthentication:
         authn.init_app(self.app)
         return authn
 
-    def get_view_mock(self, name = 'test_callback'):
+    def get_view_mock(self, name='test_callback'):
         mock = MagicMock()
         mock.__name__ = name
         mock.return_value = self.CALLBACK_RETURN_VALUE
@@ -160,8 +160,7 @@ class TestOIDCAuthentication:
 
         # register logout view to force 'post_logout_redirect_uris' to be included in registration request
         logout_view_mock = self.get_view_mock()
-        self.app.add_url_rule('/logout', view_func=logout_view_mock)
-        authn.oidc_logout(logout_view_mock)
+        self.app.add_url_rule('/logout', view_func=authn.oidc_logout(logout_view_mock))
 
         expected_post_logout_redirect_uris = post_logout_redirect_uris if post_logout_redirect_uris else \
             [f'http://{self.CLIENT_DOMAIN}/logout']
@@ -547,10 +546,10 @@ class TestOIDCAuthentication:
         authn.init_app(self.app)
 
         # register multiple logout views
-        view_func1 = authn.oidc_logout(self.get_view_mock('logout1'))
-        self.app.add_url_rule('/logout1', view_func=view_func1)
-        view_func2 = authn.oidc_logout(self.get_view_mock('logout2'))
-        self.app.add_url_rule('/logout2', view_func=view_func2)
+        view_func1 = authn.oidc_logout(self.get_view_mock('logout'))
+        self.app.add_url_rule('/logout1', 'test.logout', view_func=view_func1)
+        view_func2 = authn.oidc_logout(self.get_view_mock('otherlogout'))
+        self.app.add_url_rule('/logout2', 'test.otherlogout', view_func=view_func2)
 
         # verify client registration includes all logout endpoints as 'post_logout_redirect_uris'
         expected_post_logout_redirect_uris = [f'http://{self.CLIENT_DOMAIN}/logout1',
