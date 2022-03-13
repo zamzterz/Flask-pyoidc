@@ -266,6 +266,15 @@ class TestPyoidcFacade:
         assert client_credentials_grant_response == facade.client_credentials_grant(
             scope=scope, audience=['client_id1, client_id2']).to_dict()
 
+    def test_property_post_logout_redirect_uris(self):
+        post_logout_redirect_uris = ['https://client.example.com/logout']
+        client_metadata = self.CLIENT_METADATA.copy(
+            post_logout_redirect_uris=post_logout_redirect_uris)
+        facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
+                                                    client_metadata=client_metadata),
+                              REDIRECT_URI)
+        assert facade.post_logout_redirect_uris == post_logout_redirect_uris
+
 
 class TestClientAuthentication(object):
     CLIENT_ID = 'client1'
