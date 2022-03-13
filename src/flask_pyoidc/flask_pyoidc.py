@@ -90,17 +90,10 @@ class OIDCAuthentication:
 
     def _get_urls_for_logout_views(self):
         try:
-            return [self._get_url_for_view_function(view) for view in self._logout_views]
+            return [url_for(view.__name__, _external=True) for view in self._logout_views]
         except BuildError:
             logger.error('could not build url for logout view, it might be mounted under a custom endpoint')
             raise
-
-    def _get_url_for_view_function(self, view_func):
-        for endpoint, f in current_app.view_functions.items():
-            if f == view_func:
-                return url_for(endpoint, _external=True)
-
-        return None
 
     def _register_client(self, client):
         if not client._provider_configuration._client_registration_info.get('redirect_uris'):
@@ -266,6 +259,8 @@ class OIDCAuthentication:
         return None
 
     def oidc_logout(self, view_func):
+        self._logout_views.append(view_func)
+
         @functools.wraps(view_func)
         def wrapper(*args, **kwargs):
             if 'state' in flask.request.args:
@@ -274,16 +269,14 @@ class OIDCAuthentication:
                     logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
                 return view_func(*args, **kwargs)
 
-            post_logout_redirect_uri = self._get_url_for_view_function(wrapped_view_func)
+            post_logout_redirect_uri = flask.request.url
             redirect_to_provider = self._logout(post_logout_redirect_uri)
             if redirect_to_provider:
                 return redirect_to_provider
 
             return view_func(*args, **kwargs)
 
-        wrapped_view_func = wrapper
-        self._logout_views.append(wrapped_view_func)
-        return wrapped_view_func
+        return wrapper
 
     def error_view(self, view_func):
         self._error_view = view_func
