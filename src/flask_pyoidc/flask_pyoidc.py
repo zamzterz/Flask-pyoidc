@@ -260,7 +260,7 @@ class OIDCAuthentication:
 
             end_session_request = EndSessionRequest(
                 id_token_hint=id_token_jwt,
-                post_logout_redirect_uri=flask.url_for(flask.request.endpoint, _external=True),
+                post_logout_redirect_uri=flask.request.url,
                 state=flask.session['end_session_state'])
 
             logger.debug('send endsession request: %s', end_session_request.to_json())
