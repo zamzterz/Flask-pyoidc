@@ -15,12 +15,13 @@ from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
 from werkzeug.exceptions import Forbidden, Unauthorized
-from werkzeug.routing import BuildError
 
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.user_session import UserSession
+from werkzeug.routing import BuildError
+
 from .util import signed_id_token
 
 
@@ -61,9 +62,9 @@ class TestOIDCAuthentication:
         authn.init_app(self.app)
         return authn
 
-    def get_view_mock(self):
+    def get_view_mock(self, name='test_callback'):
         mock = MagicMock()
-        mock.__name__ = 'test_callback'
+        mock.__name__ = name
         mock.return_value = self.CALLBACK_RETURN_VALUE
         return mock
 
@@ -161,8 +162,7 @@ class TestOIDCAuthentication:
 
         # register logout view to force 'post_logout_redirect_uris' to be included in registration request
         logout_view_mock = self.get_view_mock()
-        self.app.add_url_rule('/logout', view_func=logout_view_mock)
-        authn.oidc_logout(logout_view_mock)
+        self.app.add_url_rule('/logout', view_func=authn.oidc_logout(logout_view_mock))
 
         expected_post_logout_redirect_uris = post_logout_redirect_uris if post_logout_redirect_uris else \
             [f'http://{self.CLIENT_DOMAIN}/logout']
@@ -498,15 +498,9 @@ class TestOIDCAuthentication:
         cookie_lifetime = (parsed_expiration - datetime.utcnow()).total_seconds()
         assert cookie_lifetime == pytest.approx(session_lifetime, abs=1)
 
-    @pytest.mark.parametrize('post_logout_redirect_uri', [
-        None,
-        'https://example.com/post_logout'
-    ])
-    def test_logout_redirects_to_provider_if_end_session_endpoint_is_configured(self, post_logout_redirect_uri):
+    def test_logout_redirects_to_provider_if_end_session_endpoint_is_configured(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
         client_metadata = {}
-        if post_logout_redirect_uri:
-            client_metadata['post_logout_redirect_uris'] = [post_logout_redirect_uri]
 
         authn = self.init_app(provider_metadata_extras={'end_session_endpoint': end_session_endpoint},
                               client_metadata_extras=client_metadata)
@@ -532,9 +526,72 @@ class TestOIDCAuthentication:
         assert end_session_redirect.location.startswith(end_session_endpoint)
         assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
 
-        expected_post_logout_redirect_uri = post_logout_redirect_uri if post_logout_redirect_uri else 'http://{}/logout'.format(self.CLIENT_DOMAIN)
-        assert parsed_request['post_logout_redirect_uri'] == expected_post_logout_redirect_uri
+        assert parsed_request['post_logout_redirect_uri'] == 'http://{}/logout'.format(self.CLIENT_DOMAIN)
         assert not logout_view_mock.called
+
+    @responses.activate
+    def test_multiple_logout_endpoints_are_supported(self):
+        end_session_endpoint = 'https://provider.example.com/end_session'
+        registration_endpoint = self.PROVIDER_BASEURL + '/register'
+        id_token = IdToken(**{'sub': 'sub1', 'nonce': 'nonce'})
+
+        provider_metadata = ProviderMetadata(self.PROVIDER_BASEURL,
+                                             self.PROVIDER_BASEURL + '/auth',
+                                             self.PROVIDER_BASEURL + '/jwks',
+                                             registration_endpoint=registration_endpoint,
+                                             end_session_endpoint=end_session_endpoint)
+        post_logout_redirect_uris = [f'http://{self.CLIENT_DOMAIN}/logout1',
+                                     f'http://{self.CLIENT_DOMAIN}/logout2']
+        client_registration_info = ClientRegistrationInfo(post_logout_redirect_uris=post_logout_redirect_uris)
+        provider_configurations = {
+            self.PROVIDER_NAME: ProviderConfiguration(provider_metadata=provider_metadata,
+                                                      client_registration_info=client_registration_info)
+        }
+        authn = OIDCAuthentication(provider_configurations)
+        authn.init_app(self.app)
+
+        # register multiple logout views
+        view_func1 = authn.oidc_logout(self.get_view_mock('logout'))
+        self.app.add_url_rule('/logout1', 'logout', view_func=view_func1)
+        view_func2 = authn.oidc_logout(self.get_view_mock('otherlogout'))
+        # register logout view with custom endpoint
+        self.app.add_url_rule('/logout2', 'test.otherlogout', view_func=view_func2)
+
+        # verify client registration includes all logout endpoints as 'post_logout_redirect_uris'
+        responses.add(responses.POST, registration_endpoint, json={
+            'client_id': 'client1', 'client_secret': 'secret1',
+            'redirect_uris': [f'http://{self.CLIENT_DOMAIN}/redirect_uri'],
+            'post_logout_redirect_uris': post_logout_redirect_uris})
+        view_mock = self.get_view_mock()
+        with self.app.test_request_context('/'):
+            authn.oidc_auth(self.PROVIDER_NAME)(view_mock)()
+
+        registration_request = json.loads(responses.calls[0].request.body)
+        expected_registration_request = {'application_type': 'web', 'response_types': ['code'],
+                                         'redirect_uris': [f'http://{self.CLIENT_DOMAIN}/redirect_uri'],
+                                         'post_logout_redirect_uris': post_logout_redirect_uris,
+                                         'grant_types': ['authorization_code']}
+        assert registration_request == expected_registration_request
+
+        # verify each logout endpoint can be called
+        for endpoint, view_func in [('/logout1', view_func1), ('/logout2', view_func2)]:
+            with self.app.test_request_context(endpoint):
+                UserSession(flask.session, self.PROVIDER_NAME).update(access_token='test_access_token',
+                                                                      id_token=id_token.to_dict(),
+                                                                      id_token_jwt=id_token.to_jwt(),
+                                                                      userinfo={'sub': 'user1'})
+                end_session_redirect = view_func()
+                # ensure user session has been cleared
+                assert all(k not in flask.session for k in UserSession.KEYS)
+                parsed_request = dict(parse_qsl(urlparse(end_session_redirect.headers['Location']).query))
+                assert parsed_request['state'] == flask.session['end_session_state']
+
+            assert end_session_redirect.status_code == 303
+            assert end_session_redirect.location.startswith(end_session_endpoint)
+            assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
+
+            expected_post_logout_redirect_uri = f'http://{self.CLIENT_DOMAIN}{endpoint}'
+            assert parsed_request['post_logout_redirect_uri'] == expected_post_logout_redirect_uri
 
     def test_logout_with_missing_end_session_state_fails_gracefully(self):
         end_session_endpoint = 'https://provider.example.com/end_session'
@@ -973,24 +1030,11 @@ class TestOIDCAuthentication:
             assert view_mock.called
             assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
 
-    def test_get_url_for_logout_view(self):
-
-        authn = self.init_app()
-        assert authn._get_url_for_logout_view() is None
-        logout_view_mock = self.get_view_mock()
-        authn.oidc_logout(logout_view_mock)
-        self.app.add_url_rule('/logout', view_func=logout_view_mock)
-        with self.app.test_request_context('/'):
-            assert authn._get_url_for_logout_view() == f'http://{self.CLIENT_DOMAIN}/logout'
-
     def test_get_url_for_logout_view_should_raise_build_error_if_mounted_under_custom_endpoint(self):
-
         authn = self.init_app()
         logout_view_mock = self.get_view_mock()
-        authn.oidc_logout(logout_view_mock)
-        blueprint = flask.Blueprint('api', __name__)
-        blueprint.add_url_rule('/auth/logout', view_func=logout_view_mock)
-        self.app.register_blueprint(blueprint)
-        with pytest.raises(BuildError):
-            with self.app.test_request_context('/'):
-                assert authn._get_url_for_logout_view()
+        self.app.add_url_rule('/logout', endpoint='test.logout', view_func=authn.oidc_logout(logout_view_mock))
+
+        with self.app.test_request_context('/'):
+            with pytest.raises(BuildError):
+                authn._get_urls_for_logout_views()
