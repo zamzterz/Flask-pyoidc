@@ -20,6 +20,8 @@ from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.user_session import UserSession
+from werkzeug.routing import BuildError
+
 from .util import signed_id_token
 
 
@@ -1027,3 +1029,12 @@ class TestOIDCAuthentication:
                 scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
             assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+
+    def test_get_url_for_logout_view_should_raise_build_error_if_mounted_under_custom_endpoint(self):
+        authn = self.init_app()
+        logout_view_mock = self.get_view_mock()
+        self.app.add_url_rule('/logout', endpoint='test.logout', view_func=authn.oidc_logout(logout_view_mock))
+
+        with self.app.test_request_context('/'):
+            with pytest.raises(BuildError):
+                authn._get_urls_for_logout_views()
