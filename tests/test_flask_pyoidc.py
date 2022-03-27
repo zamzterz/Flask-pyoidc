@@ -10,6 +10,7 @@ from flask import Flask
 from flask_pyoidc.redirect_uri_config import RedirectUriConfig
 from http.cookies import SimpleCookie
 from jwkest import jws
+from oic.oauth2.grant import Token
 from oic.oic import AuthorizationResponse
 from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
@@ -17,8 +18,8 @@ from urllib.parse import parse_qsl, urlparse, urlencode
 from werkzeug.exceptions import Forbidden, Unauthorized
 
 from flask_pyoidc import OIDCAuthentication
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
-    ClientRegistrationInfo
+from flask_pyoidc.provider_configuration import (ProviderConfiguration, ProviderMetadata, ClientMetadata,
+                                                 ClientRegistrationInfo)
 from flask_pyoidc.user_session import UserSession
 from werkzeug.routing import BuildError
 
@@ -734,6 +735,7 @@ class TestOIDCAuthentication:
     def test_should_refresh_expired_access_token(self):
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+        authn.clients['test_provider']._token = Token()
 
         token_response = {
             'access_token': 'new-access-token',
@@ -763,6 +765,7 @@ class TestOIDCAuthentication:
     def test_should_refresh_still_valid_access_token_if_forced(self):
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+        authn.clients['test_provider']._token = Token()
 
         token_response = {
             'access_token': 'new-access-token',
@@ -800,6 +803,7 @@ class TestOIDCAuthentication:
     def test_should_return_None_if_token_refresh_request_fails(self):
         token_endpoint = self.PROVIDER_BASEURL + '/token'
         authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint})
+        authn.clients['test_provider']._token = Token()
 
         token_response = {
             'error': 'invalid_grant',

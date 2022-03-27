@@ -1,13 +1,16 @@
 import base64
-import json
 import logging
 
 from oic.extension.client import Client as ClientExtension
 from oic.extension.message import TokenIntrospectionResponse
-from oic.oic import Client, RegistrationResponse, AuthorizationResponse, \
-    AccessTokenResponse, TokenErrorResponse, AuthorizationErrorResponse, OpenIDSchema
-from oic.oic.message import ProviderConfigurationResponse
+from oic.oauth2 import Client as Oauth2Client
+from oic.oauth2.grant import Token
+from oic.oauth2.message import AccessTokenResponse
+from oic.oic import Client
+from oic.oic.message import AuthorizationResponse, ProviderConfigurationResponse, RegistrationResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
+
+from .message_factory import CCMessageFactory
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +55,7 @@ class PyoidcFacade:
         """
         self._provider_configuration = provider_configuration
         self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
-        # Token Introspection is implemented in extension sub-package of the
-        # client in pyoidc
-        self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
+        self._token = None
 
         provider_metadata = provider_configuration.ensure_provider_metadata()
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
@@ -104,7 +105,7 @@ class PyoidcFacade:
     def login_url(self, auth_request):
         """
         Args:
-            auth_request (AuthorizationRequest): authenticatio request
+            auth_request (AuthorizationRequest): authentication request
         Returns:
             str: Authentication request as a URL to redirect the user to the provider.
         """
@@ -112,34 +113,43 @@ class PyoidcFacade:
 
     def parse_authentication_response(self, response_params):
         """
-        Args:
-            response_params (Mapping[str, str]): authentication response parameters
-        Returns:
-            Union[AuthorizationResponse, AuthorizationErrorResponse]: The parsed authorization response
+        Parameters
+        ----------
+        response_params: Mapping[str, str]
+            authentication response parameters.
+
+        Returns
+        -------
+        Union[AuthorizationResponse, AuthorizationErrorResponse]
+            The parsed authorization response.
         """
-        auth_resp = self._parse_response(response_params, AuthorizationResponse, AuthorizationErrorResponse)
+        auth_resp = self._client.parse_response(AuthorizationResponse, info=response_params, sformat='dict')
         if 'id_token' in response_params:
             auth_resp['id_token_jwt'] = response_params['id_token']
         return auth_resp
 
-    def exchange_authorization_code(self, authorization_code):
-        """
-        Requests tokens from an authorization code.
+    def exchange_authorization_code(self, authorization_code: str, state: str):
+        """Requests tokens from an authorization code.
 
-        Args:
-            authorization_code (str): authorization code issued to client after user authorization
+        Parameters
+        ----------
+        authorization_code: str
+            authorization code issued to client after user authorization
+        state: str
+            state is used to keep track of responses to outstanding requests.
 
-        Returns:
-            Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
-            request was performed.
+        Returns
+        -------
+        Union[AccessTokenResponse, TokenErrorResponse, None]
+            The parsed token response, or None if no token request was performed.
         """
-        request = {
+        request_args = {
             'grant_type': 'authorization_code',
             'code': authorization_code,
             'redirect_uri': self._redirect_uri
         }
 
-        return self._token_request(request)
+        return self._token_request(request_args, state)
 
     def verify_id_token(self, id_token, auth_request):
         """
@@ -156,79 +166,94 @@ class PyoidcFacade:
         """
         self._client.verify_id_token(id_token, auth_request)
 
-    def refresh_token(self, refresh_token):
-        """
-        Requests new tokens using a refresh token.
+    def refresh_token(self, refresh_token: str):
+        """Requests new tokens using a refresh token.
 
-        Args:
-            refresh_token (str): refresh token issued to client after user authorization
+        Parameters
+        ----------
+        refresh_token: str
+            refresh token issued to client after user authorization.
 
-        Returns:
-            Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
-            request was performed.
+        Returns
+        -------
+        Union[AccessTokenResponse, TokenErrorResponse, None]
+            The parsed token response, or None if no token request was performed.
         """
-        request = {
+        request_args = {
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token,
+            'client_id': self._client.client_id,
+            'client_secret': self._client.client_secret,
             'redirect_uri': self._redirect_uri
         }
+        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
+                                                                    'client_secret_basic')
+        return self._client.do_access_token_refresh(request_args=request_args,
+                                                    authn_method=client_auth_method,
+                                                    token=self._token,
+                                                    endpoint=self._client.token_endpoint
+                                                    )
 
-        return self._token_request(request)
+    def _token_request(self, request_args: dict, state: str):
+        """Makes a token request.  If the 'token_endpoint' is not configured
+        in the provider metadata, no request will be made.
 
-    def _token_request(self, request):
+        Parameters
+        ----------
+        request_args: dict
+            Token request parameters.
+        state: str
+            state is used to keep track of responses to outstanding requests.
+
+        Returns
+        -------
+        token_response: Union[AccessTokenResponse, TokenErrorResponse, None]
+            The parsed token response, or None if no token request was performed.
         """
-        Makes a token request.  If the 'token_endpoint' is not configured in the provider metadata, no request will
-        be made.
-
-        Args:
-            request (Mapping[str, str]): token request parameters
-
-        Returns:
-            Union[AccessTokenResponse, TokenErrorResponse, None]: The parsed token response, or None if no token
-            request was performed.
-        """
-
         if not self._client.token_endpoint:
             return None
 
-        logger.debug('making token request: %s', request)
-        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method', 'client_secret_basic')
+        logger.debug('making token request: %s', request_args)
+        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
+                                                                    'client_secret_basic')
         auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)(client_auth_method,
-                                                                                                request)
-        resp = self._provider_configuration.requests_session \
-            .post(self._client.token_endpoint,
-                  data=request,
-                  headers=auth_header) \
-            .json()
-        logger.debug('received token response: %s', json.dumps(resp))
+                                                                                                request_args)
+        token_response = self._client.do_access_token_request(state=state,
+                                                              request_args=request_args,
+                                                              authn_method=client_auth_method,
+                                                              headers=auth_header,
+                                                              endpoint=self._client.token_endpoint
+                                                              )
+        logger.debug(f'received token response: {token_response}')
+        # Store token response in Token class instance. This is required when
+        # making refresh access token request.
+        self._token = Token(resp=token_response)
 
-        token_resp = self._parse_response(resp, AccessTokenResponse, TokenErrorResponse)
-        if 'id_token' in resp:
-            token_resp['id_token_jwt'] = resp['id_token']
+        return token_response
 
-        return token_resp
+    def userinfo_request(self, access_token: str):
+        """Retrieves ID token.
 
-    def userinfo_request(self, access_token):
-        """
-        Args:
-            access_token (str): Bearer access token to use when fetching userinfo
+        Parameters
+        ----------
+        access_token: str
+            Bearer access token to use when fetching userinfo.
 
-        Returns:
-            oic.oic.message.OpenIDSchema: UserInfo Response
+        Returns
+        -------
+        Union[OpenIDSchema, UserInfoErrorResponse, ErrorResponse, None]
         """
         http_method = self._provider_configuration.userinfo_endpoint_method
         if not access_token or http_method is None or not self._client.userinfo_endpoint:
             return None
 
         logger.debug('making userinfo request')
-        userinfo_response = self._provider_configuration.requests_session \
-            .request(http_method, self._client.userinfo_endpoint, headers={'Authorization': f'Bearer {access_token}'}) \
-            .json()
+        userinfo_response = self._client.do_user_info_request(method=http_method, token=access_token)
         logger.debug('received userinfo response: %s', userinfo_response)
 
-        return OpenIDSchema(**userinfo_response)
+        return userinfo_response
 
-    def _token_introspection_request(self, access_token: str):
+    def _token_introspection_request(self, access_token: str) -> TokenIntrospectionResponse:
         """Make token introspection request.
 
         Parameters
@@ -238,23 +263,29 @@ class PyoidcFacade:
 
         Returns
         -------
-        oic.extension.message.TokenIntrospectionResponse
+        TokenIntrospectionResponse
             Response object contains result of the token introspection.
         """
-        request = {
+        request_args = {
             'token': access_token,
+            'client_id': self._client.client_id,
+            'client_secret': self._client.client_secret,
             'token_type_hint': 'access_token'
         }
-        auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)('client_secret_basic',
-                                                                                                request)
         logger.info('making token introspection request')
-        response = self._provider_configuration.requests_session \
-            .post(self._client.introspection_endpoint, data=request, headers=auth_header) \
-            .json()
+        # Token Introspection is implemented under extension sub-package of
+        # the client in pyoidc.
+        _client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
+        token_introspection_request = _client_extension.construct_TokenIntrospectionRequest(
+            request_args=request_args
+        )
+        token_introspection_response = _client_extension.do_token_introspection(
+            request_args=token_introspection_request,
+            endpoint=self._client.introspection_endpoint)
 
-        return TokenIntrospectionResponse(**response)
+        return token_introspection_response
 
-    def client_credentials_grant(self, scope: list = None, **kwargs):
+    def client_credentials_grant(self, scope: list = None, **kwargs) -> AccessTokenResponse:
         """Public method to request access_token using client_credentials flow.
         This is useful for service to service communication where user-agent is
         not available which is required in authorization code flow. Your
@@ -270,6 +301,10 @@ class PyoidcFacade:
             List of scopes to be requested.
         **kwargs : dict, optional
             Extra arguments to client credentials flow.
+
+        Returns
+        -------
+        AccessTokenResponse
 
         Examples
         --------
@@ -294,13 +329,21 @@ class PyoidcFacade:
             auth.clients['default'].client_credentials_grant(
                 scope=['read', 'write'], audience=['client_id1', 'client_id2'])
         """
-        request = {
+        request_args = {
             'grant_type': 'client_credentials',
+            'client_id': self._client.client_id,
+            'client_secret': self._client.client_secret,
             **kwargs
         }
         if scope:
-            request['scope'] = ' '.join(scope)
-        return self._token_request(request)
+            request_args['scope'] = ' '.join(scope)
+        # Client Credentials Flow is implemented under oauth2 sub-package of
+        # the client in pyoidc.
+        _oauth2_client = Oauth2Client(client_authn_method=CLIENT_AUTHN_METHOD,
+                                      message_factory=CCMessageFactory)
+        access_token = _oauth2_client.do_access_token_request(request_args=request_args,
+                                                              endpoint=self._client.token_endpoint)
+        return access_token
 
     @property
     def session_refresh_interval_seconds(self):
@@ -314,11 +357,3 @@ class PyoidcFacade:
     @property
     def post_logout_redirect_uris(self):
         return self._client.registration_response.get('post_logout_redirect_uris')
-
-    def _parse_response(self, response_params, success_response_cls, error_response_cls):
-        if 'error' in response_params:
-            response = error_response_cls(**response_params)
-        else:
-            response = success_response_cls(**response_params)
-            response.verify(keyjar=self._client.keyjar)
-        return response

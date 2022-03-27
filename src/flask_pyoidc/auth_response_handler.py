@@ -71,7 +71,8 @@ class AuthResponseHandler:
         refresh_token = None  # but never refresh token
 
         if 'code' in auth_response:
-            token_resp = self._client.exchange_authorization_code(auth_response['code'])
+            token_resp = self._client.exchange_authorization_code(auth_response['code'],
+                                                                  auth_response['state'])
             if token_resp:
                 if 'error' in token_resp:
                     raise AuthResponseErrorResponseError(token_resp.to_dict())
