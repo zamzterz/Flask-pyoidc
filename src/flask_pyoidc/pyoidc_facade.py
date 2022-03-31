@@ -4,9 +4,9 @@ import logging
 from oic.extension.client import Client as ClientExtension
 from oic.extension.message import TokenIntrospectionResponse
 from oic.oauth2 import Client as Oauth2Client
-from oic.oauth2.grant import Token
 from oic.oauth2.message import AccessTokenResponse
 from oic.oic import Client
+from oic.oic import Token
 from oic.oic.message import AuthorizationResponse, ProviderConfigurationResponse, RegistrationResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
@@ -55,7 +55,9 @@ class PyoidcFacade:
         """
         self._provider_configuration = provider_configuration
         self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
-        self._token = None
+        # Token Introspection is implemented under extension sub-package of
+        # the client in pyoidc.
+        self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
 
         provider_metadata = provider_configuration.ensure_provider_metadata()
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
@@ -143,13 +145,31 @@ class PyoidcFacade:
         Union[AccessTokenResponse, TokenErrorResponse, None]
             The parsed token response, or None if no token request was performed.
         """
+        if not self._client.token_endpoint:
+            return None
+
         request_args = {
             'grant_type': 'authorization_code',
             'code': authorization_code,
             'redirect_uri': self._redirect_uri
         }
+        logger.debug('making token request: %s', request_args)
+        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
+                                                                    'client_secret_basic')
+        auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)(client_auth_method,
+                                                                                                request_args)
+        token_response = self._client.do_access_token_request(state=state,
+                                                              request_args=request_args,
+                                                              authn_method=client_auth_method,
+                                                              headers=auth_header,
+                                                              endpoint=self._client.token_endpoint
+                                                              )
+        logger.debug(f'received token response: {token_response}')
+        # Store token response in token_class instance. This is required when
+        # making refresh access token request.
+        self._client.token_class = Token(resp=token_response)
 
-        return self._token_request(request_args, state)
+        return token_response
 
     def verify_id_token(self, id_token, auth_request):
         """
@@ -190,46 +210,9 @@ class PyoidcFacade:
                                                                     'client_secret_basic')
         return self._client.do_access_token_refresh(request_args=request_args,
                                                     authn_method=client_auth_method,
-                                                    token=self._token,
+                                                    token=self._client.token_class,
                                                     endpoint=self._client.token_endpoint
                                                     )
-
-    def _token_request(self, request_args: dict, state: str):
-        """Makes a token request.  If the 'token_endpoint' is not configured
-        in the provider metadata, no request will be made.
-
-        Parameters
-        ----------
-        request_args: dict
-            Token request parameters.
-        state: str
-            state is used to keep track of responses to outstanding requests.
-
-        Returns
-        -------
-        token_response: Union[AccessTokenResponse, TokenErrorResponse, None]
-            The parsed token response, or None if no token request was performed.
-        """
-        if not self._client.token_endpoint:
-            return None
-
-        logger.debug('making token request: %s', request_args)
-        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
-                                                                    'client_secret_basic')
-        auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)(client_auth_method,
-                                                                                                request_args)
-        token_response = self._client.do_access_token_request(state=state,
-                                                              request_args=request_args,
-                                                              authn_method=client_auth_method,
-                                                              headers=auth_header,
-                                                              endpoint=self._client.token_endpoint
-                                                              )
-        logger.debug(f'received token response: {token_response}')
-        # Store token response in Token class instance. This is required when
-        # making refresh access token request.
-        self._token = Token(resp=token_response)
-
-        return token_response
 
     def userinfo_request(self, access_token: str):
         """Retrieves ID token.
@@ -273,13 +256,10 @@ class PyoidcFacade:
             'token_type_hint': 'access_token'
         }
         logger.info('making token introspection request')
-        # Token Introspection is implemented under extension sub-package of
-        # the client in pyoidc.
-        _client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
-        token_introspection_request = _client_extension.construct_TokenIntrospectionRequest(
+        token_introspection_request = self._client_extension.construct_TokenIntrospectionRequest(
             request_args=request_args
         )
-        token_introspection_response = _client_extension.do_token_introspection(
+        token_introspection_response = self._client_extension.do_token_introspection(
             request_args=token_introspection_request,
             endpoint=self._client.introspection_endpoint)
 

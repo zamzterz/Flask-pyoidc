@@ -3,9 +3,8 @@ import time
 
 import pytest
 import responses
-from oic.oauth2.grant import Grant, Token
-from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema, \
-    AuthorizationErrorResponse
+from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
+                     Token, TokenErrorResponse)
 from urllib.parse import parse_qsl
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
@@ -169,7 +168,7 @@ class TestPyoidcFacade:
                                              refresh_token='refresh-token',
                                              token_type='Bearer',
                                              id_token=id_token_jwt,
-                                             expires_in=now)
+                                             expires_in=now + 1)
 
         responses.add(responses.POST, token_endpoint, json=token_response.to_dict())
 
@@ -180,7 +179,7 @@ class TestPyoidcFacade:
         grant = Grant(resp=token_response)
         grant.grant_expiration_time = now + grant.exp_in
         facade._client.grant = {'test-state': grant}
-        facade._token = Token(resp=token_response)
+        facade._client.token_class = Token(resp=token_response)
 
         responses.add(responses.GET,
                       self.PROVIDER_METADATA['jwks_uri'],
@@ -207,22 +206,16 @@ class TestPyoidcFacade:
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
         state = 'test-state'
-        grant = Grant(resp=token_response)
+        grant = Grant()
         grant.grant_expiration_time = int(time.time()) + grant.exp_in
         facade._client.grant = {state: grant}
-        facade._token = Token()
         assert facade.exchange_authorization_code('1234', state) == token_response
 
     def test_token_request_handles_missing_provider_token_endpoint(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
-        state = 'test-state'
-        grant = Grant()
-        # grant.grant_expiration_time = int(time.time()) + grant.exp_in
-        facade._client.grant = {state: grant}
-        facade._token = Token()
-        assert facade.exchange_authorization_code('1234', state) is None
+        assert facade.exchange_authorization_code(None, None) is None
 
     @pytest.mark.parametrize('userinfo_http_method', [
         'GET',
@@ -262,8 +255,12 @@ class TestPyoidcFacade:
         assert facade.userinfo_request(None) is None
 
     @responses.activate
-    @pytest.mark.parametrize('scope', [None, ['read', 'write']])
-    def test_client_credentials_grant(self, scope):
+    @pytest.mark.parametrize('scope, extra_args',
+                             [(None, {}),
+                              (['read', 'write'],
+                               {'audience': ['client_id1, client_id2']})
+                              ])
+    def test_client_credentials_grant(self, scope, extra_args):
         token_endpoint = f'{self.PROVIDER_BASEURL}/token'
         provider_metadata = self.PROVIDER_METADATA.copy(
             token_endpoint=token_endpoint)
@@ -282,7 +279,7 @@ class TestPyoidcFacade:
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
         assert client_credentials_grant_response == facade.client_credentials_grant(
-            scope=scope, audience=['client_id1, client_id2']).to_dict()
+            scope=scope, **extra_args).to_dict()
 
     def test_post_logout_redirect_uris(self):
         post_logout_redirect_uris = ['https://client.example.com/logout']
