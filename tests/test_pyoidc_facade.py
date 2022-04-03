@@ -4,7 +4,7 @@ import time
 import pytest
 import responses
 from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
-                     Token, TokenErrorResponse)
+                     TokenErrorResponse)
 from urllib.parse import parse_qsl
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
@@ -179,7 +179,6 @@ class TestPyoidcFacade:
         grant = Grant(resp=token_response)
         grant.grant_expiration_time = now + grant.exp_in
         facade._client.grant = {'test-state': grant}
-        facade._client.token_class = Token(resp=token_response)
 
         responses.add(responses.GET,
                       self.PROVIDER_METADATA['jwks_uri'],

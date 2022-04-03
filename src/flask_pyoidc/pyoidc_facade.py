@@ -165,9 +165,6 @@ class PyoidcFacade:
                                                               endpoint=self._client.token_endpoint
                                                               )
         logger.debug(f'received token response: {token_response}')
-        # Store token response in token_class instance. This is required when
-        # making refresh access token request.
-        self._client.token_class = Token(resp=token_response)
 
         return token_response
 
@@ -210,7 +207,7 @@ class PyoidcFacade:
                                                                     'client_secret_basic')
         return self._client.do_access_token_refresh(request_args=request_args,
                                                     authn_method=client_auth_method,
-                                                    token=self._client.token_class,
+                                                    token=Token(resp={'refresh_token': refresh_token}),
                                                     endpoint=self._client.token_endpoint
                                                     )
 
