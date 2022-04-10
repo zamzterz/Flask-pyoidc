@@ -17,7 +17,7 @@ import functools
 import json
 import logging
 import time
-from typing import Optional
+from typing import Any, Callable, Optional
 from urllib.parse import parse_qsl
 
 import flask
@@ -68,6 +68,7 @@ class OIDCAuthentication:
         self.current_token_identity = LocalProxy(lambda: getattr(
             _app_ctx_stack.top, 'current_token_identity', None))
         self._redirect_uri_config = redirect_uri_config
+        self.post_auth_func = None
 
         if app:
             self.init_app(app)
@@ -181,6 +182,8 @@ class OIDCAuthentication:
                                           refresh_token=result.refresh_token)
 
         destination = flask.session.pop('destination')
+        if self.post_auth_func:
+            self.post_auth_func()
         if is_processing_fragment_encoded_response:
             # if the POST request was from the JS page handling fragment encoded responses we need to return
             # the destination URL as the response body
@@ -529,3 +532,22 @@ class OIDCAuthentication:
             return wrapper
 
         return hybrid_decorator
+
+    def post_auth(self, post_auth_func: Callable[[], Any]):
+        """Registers execution of decorated function post authentication.
+
+        Parameters
+        ----------
+        post_auth_func: Callable[[], Any]
+            User defined function that is executed post authentication.
+
+        Examples
+        --------
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config})
+            @auth.post_auth
+            def _post_auth_func():
+                ...
+        """
+        self.post_auth_func = post_auth_func

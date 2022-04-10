@@ -1038,3 +1038,55 @@ class TestOIDCAuthentication:
         with self.app.test_request_context('/'):
             with pytest.raises(BuildError):
                 authn._get_urls_for_logout_views()
+
+    @patch('time.time')
+    @patch('oic.utils.time_util.utc_time_sans_frac')
+    @responses.activate
+    def test_post_auth(self, time_mock, utc_time_sans_frac_mock):
+        timestamp = time.mktime(datetime(2017, 1, 1).timetuple())
+        time_mock.return_value = timestamp
+        utc_time_sans_frac_mock.return_value = int(timestamp)
+
+        user_id = 'user1'
+        exp_time = 10
+        nonce = 'test_nonce'
+        id_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'aud': [self.CLIENT_ID],
+            'sub': user_id,
+            'exp': int(timestamp) + exp_time,
+            'iat': int(timestamp),
+            'nonce': nonce
+        }
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
+        access_token = 'test_access_token'
+        expires_in = 3600
+        token_response = {
+            'access_token': access_token,
+            'expires_in': expires_in,
+            'token_type': 'Bearer',
+            'id_token': id_token_jwt
+        }
+        token_endpoint = self.PROVIDER_BASEURL + '/token'
+        responses.add(responses.POST, token_endpoint, json=token_response)
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/jwks',
+                      json={'keys': [id_token_signing_key.serialize()]})
+
+        userinfo = {'sub': user_id, 'name': 'Test User'}
+        userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
+        responses.add(responses.GET, userinfo_endpoint, json=userinfo)
+
+        authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint,
+                                                        'userinfo_endpoint': userinfo_endpoint})
+        post_auth_func = self.get_view_mock(name='post_auth_func')
+        authn.post_auth(post_auth_func)
+
+        state = 'test_state'
+        with self.app.test_request_context(f'/redirect_uri?state={state}&code=test'):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/'
+            flask.session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
+            authn._handle_authentication_response()
+
+        assert post_auth_func.called is True
