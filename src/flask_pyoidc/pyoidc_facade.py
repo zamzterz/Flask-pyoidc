@@ -253,12 +253,8 @@ class PyoidcFacade:
             'token_type_hint': 'access_token'
         }
         logger.info('making token introspection request')
-        token_introspection_request = self._client_extension.construct_TokenIntrospectionRequest(
-            request_args=request_args
-        )
         token_introspection_response = self._client_extension.do_token_introspection(
-            request_args=token_introspection_request,
-            endpoint=self._client.introspection_endpoint)
+            request_args=request_args, endpoint=self._client.introspection_endpoint)
 
         return token_introspection_response
 
