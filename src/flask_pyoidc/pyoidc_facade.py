@@ -54,12 +54,14 @@ class PyoidcFacade:
             provider_configuration (flask_pyoidc.provider_configuration.ProviderConfiguration)
         """
         self._provider_configuration = provider_configuration
-        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD)
+        self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD,
+                              settings=provider_configuration.requests_session)
         # Token Introspection is implemented under extension sub-package of
         # the client in pyoidc.
-        self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD)
+        self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD,
+                                                 settings=provider_configuration.requests_session)
 
-        provider_metadata = provider_configuration.ensure_provider_metadata()
+        provider_metadata = provider_configuration.ensure_provider_metadata(self._client)
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
                                             provider_metadata['issuer'])
 
@@ -313,7 +315,8 @@ class PyoidcFacade:
         # Client Credentials Flow is implemented under oauth2 sub-package of
         # the client in pyoidc.
         _oauth2_client = Oauth2Client(client_authn_method=CLIENT_AUTHN_METHOD,
-                                      message_factory=CCMessageFactory)
+                                      message_factory=CCMessageFactory,
+                                      settings=self._provider_configuration.requests_session)
         access_token = _oauth2_client.do_access_token_request(request_args=request_args,
                                                               endpoint=self._client.token_endpoint)
         return access_token
@@ -324,7 +327,7 @@ class PyoidcFacade:
 
     @property
     def provider_end_session_endpoint(self):
-        provider_metadata = self._provider_configuration.ensure_provider_metadata()
+        provider_metadata = self._provider_configuration.ensure_provider_metadata(self._client)
         return provider_metadata.get('end_session_endpoint')
 
     @property

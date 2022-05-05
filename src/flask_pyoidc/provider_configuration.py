@@ -1,8 +1,9 @@
 import collections.abc
 import logging
 
-from oic.oic import Client
 import requests
+from oic.oic import Client
+from oic.utils.settings import ClientSettings
 
 logger = logging.getLogger(__name__)
 
@@ -169,17 +170,16 @@ class ProviderConfiguration:
         self.userinfo_endpoint_method = userinfo_http_method
         self.auth_request_params = auth_request_params or {}
         self.session_refresh_interval_seconds = session_refresh_interval_seconds
+        # For session persistence
+        self.requests_session = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
+                                               requests_session=requests_session or requests.Session())
 
-        self.requests_session = requests_session or requests.Session()
-
-    def ensure_provider_metadata(self):
+    def ensure_provider_metadata(self, client: Client):
         if not self._provider_metadata:
-            resp = self.requests_session \
-                .get(self._issuer + '/.well-known/openid-configuration',
-                     timeout=self.DEFAULT_REQUEST_TIMEOUT)
-            logger.debug('Received discovery response: ' + resp.text)
+            resp = client.provider_config(self._issuer)
+            logger.debug(f'Received discovery response: {resp.to_dict()}')
 
-            self._provider_metadata = ProviderMetadata(**resp.json())
+            self._provider_metadata = ProviderMetadata(**resp.to_dict())
 
         return self._provider_metadata
 
