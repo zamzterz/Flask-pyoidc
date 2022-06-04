@@ -27,16 +27,16 @@ class PyoidcFacade:
         """
         self._provider_configuration = provider_configuration
         self._client = Client(client_authn_method=CLIENT_AUTHN_METHOD,
-                              settings=provider_configuration.requests_session)
+                              settings=provider_configuration.client_settings)
         # Token Introspection is implemented under extension sub-package of
         # the client in pyoidc.
         self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD,
-                                                 settings=provider_configuration.requests_session)
+                                                 settings=provider_configuration.client_settings)
         # Client Credentials Flow is implemented under oauth2 sub-package of
         # the client in pyoidc.
         self._oauth2_client = Oauth2Client(client_authn_method=CLIENT_AUTHN_METHOD,
                                            message_factory=CCMessageFactory,
-                                           settings=self._provider_configuration.requests_session)
+                                           settings=self._provider_configuration.client_settings)
 
         provider_metadata = provider_configuration.ensure_provider_metadata(self._client)
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),

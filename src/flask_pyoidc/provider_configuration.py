@@ -171,8 +171,8 @@ class ProviderConfiguration:
         self.auth_request_params = auth_request_params or {}
         self.session_refresh_interval_seconds = session_refresh_interval_seconds
         # For session persistence
-        self.requests_session = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
-                                               requests_session=requests_session or requests.Session())
+        self.client_settings = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
+                                              requests_session=requests_session or requests.Session())
 
     def ensure_provider_metadata(self, client: Client):
         if not self._provider_metadata:
