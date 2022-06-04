@@ -149,7 +149,7 @@ class PyoidcFacade:
                                                               authn_method=client_auth_method,
                                                               endpoint=self._client.token_endpoint
                                                               )
-        logger.debug(f'received token response: {token_response}')
+        logger.info('Received token response.')
 
         return token_response
 
