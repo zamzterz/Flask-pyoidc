@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
     ClientRegistrationInfo
-from flask_pyoidc.pyoidc_facade import PyoidcFacade, _ClientAuthentication
+from flask_pyoidc.pyoidc_facade import PyoidcFacade
 from .util import signed_id_token
 
 REDIRECT_URI = 'https://rp.example.com/redirect_uri'
@@ -288,32 +288,3 @@ class TestPyoidcFacade:
                                                     client_metadata=client_metadata),
                               REDIRECT_URI)
         assert facade.post_logout_redirect_uris == post_logout_redirect_uris
-
-
-class TestClientAuthentication(object):
-    CLIENT_ID = 'client1'
-    CLIENT_SECRET = 'secret1'
-
-    @property
-    def basic_auth(self):
-        credentials = '{}:{}'.format(self.CLIENT_ID, self.CLIENT_SECRET)
-        return 'Basic {}'.format(base64.urlsafe_b64encode(credentials.encode('utf-8')).decode('utf-8'))
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.client_auth = _ClientAuthentication(self.CLIENT_ID, self.CLIENT_SECRET)
-
-    def test_client_secret_basic(self):
-        request = {}
-        headers = self.client_auth('client_secret_basic', request)
-        assert headers == {'Authorization': self.basic_auth}
-        assert request == {}
-
-    def test_client_secret_post(self):
-        request = {}
-        headers = self.client_auth('client_secret_post', request)
-        assert headers is None
-        assert request == {'client_id': self.CLIENT_ID, 'client_secret': self.CLIENT_SECRET}
-
-    def test_defaults_to_client_secret_basic(self):
-        assert self.client_auth('invalid_client_auth_method', {}) == self.client_auth('client_secret_basic', {})

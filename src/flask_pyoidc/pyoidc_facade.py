@@ -15,34 +15,6 @@ from .message_factory import CCMessageFactory
 logger = logging.getLogger(__name__)
 
 
-class _ClientAuthentication:
-    def __init__(self, client_id, client_secret):
-        self._client_id = client_id
-        self._client_secret = client_secret
-
-    def __call__(self, method, request):
-        """
-        Args:
-            method (str): Client Authentication Method. Only 'client_secret_basic' and 'client_secret_post' is
-                supported.
-            request (MutableMapping[str, str]): Token request parameters. This may be modified, i.e. if
-                'client_secret_post' is used the client credentials will be added.
-
-        Returns:
-            (Mapping[str, str]): HTTP headers to be included in the token request, or `None` if no extra HTTPS headers
-            are required for the token request.
-        """
-        if method == 'client_secret_post':
-            request['client_id'] = self._client_id
-            request['client_secret'] = self._client_secret
-            return None  # authentication is in the request body, so no Authorization header is returned
-
-        # default to 'client_secret_basic'
-        credentials = '{}:{}'.format(self._client_id, self._client_secret)
-        basic_auth = 'Basic {}'.format(base64.urlsafe_b64encode(credentials.encode('utf-8')).decode('utf-8'))
-        return {'Authorization': basic_auth}
-
-
 class PyoidcFacade:
     """
     Wrapper around pyoidc library, coupled with config for a simplified API for flask-pyoidc.
@@ -60,6 +32,11 @@ class PyoidcFacade:
         # the client in pyoidc.
         self._client_extension = ClientExtension(client_authn_method=CLIENT_AUTHN_METHOD,
                                                  settings=provider_configuration.requests_session)
+        # Client Credentials Flow is implemented under oauth2 sub-package of
+        # the client in pyoidc.
+        self._oauth2_client = Oauth2Client(client_authn_method=CLIENT_AUTHN_METHOD,
+                                           message_factory=CCMessageFactory,
+                                           settings=self._provider_configuration.requests_session)
 
         provider_metadata = provider_configuration.ensure_provider_metadata(self._client)
         self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
@@ -67,18 +44,27 @@ class PyoidcFacade:
 
         if self._provider_configuration.registered_client_metadata:
             client_metadata = self._provider_configuration.registered_client_metadata.to_dict()
-            registration_response = RegistrationResponse(**client_metadata)
-            self._client.store_registration_info(registration_response)
+            client_metadata.update(redirect_uris=list(redirect_uri))
+            self._store_registration_info(client_metadata)
 
         self._redirect_uri = redirect_uri
+
+    def _store_registration_info(self, client_metadata):
+        registration_response = RegistrationResponse(**client_metadata)
+        self._client.store_registration_info(registration_response)
+        self._client_extension.store_registration_info(registration_response)
+        # Set client_id and client_secret for _oauth2_client. This is used
+        # by Client Credentials Flow.
+        self._oauth2_client.client_id = registration_response['client_id']
+        self._oauth2_client.client_secret = registration_response['client_secret']
 
     def is_registered(self):
         return bool(self._provider_configuration.registered_client_metadata)
 
     def register(self):
         client_metadata = self._provider_configuration.register_client(self._client)
-        logger.debug('client registration response: %s', client_metadata)
-        self._client.store_registration_info(RegistrationResponse(**client_metadata.to_dict()))
+        logger.debug(f'client registration response: {client_metadata}')
+        self._store_registration_info(client_metadata)
 
     def authentication_request(self, state, nonce, extra_auth_params):
         """
@@ -158,12 +144,9 @@ class PyoidcFacade:
         logger.debug('making token request: %s', request_args)
         client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
                                                                     'client_secret_basic')
-        auth_header = _ClientAuthentication(self._client.client_id, self._client.client_secret)(client_auth_method,
-                                                                                                request_args)
         token_response = self._client.do_access_token_request(state=state,
                                                               request_args=request_args,
                                                               authn_method=client_auth_method,
-                                                              headers=auth_header,
                                                               endpoint=self._client.token_endpoint
                                                               )
         logger.debug(f'received token response: {token_response}')
@@ -201,8 +184,6 @@ class PyoidcFacade:
         request_args = {
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token,
-            'client_id': self._client.client_id,
-            'client_secret': self._client.client_secret,
             'redirect_uri': self._redirect_uri
         }
         client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
@@ -250,13 +231,13 @@ class PyoidcFacade:
         """
         request_args = {
             'token': access_token,
-            'client_id': self._client.client_id,
-            'client_secret': self._client.client_secret,
             'token_type_hint': 'access_token'
         }
+        client_auth_method = self._client.registration_response.get('introspection_endpoint_auth_method',
+                                                                    'client_secret_basic')
         logger.info('making token introspection request')
         token_introspection_response = self._client_extension.do_token_introspection(
-            request_args=request_args, endpoint=self._client.introspection_endpoint)
+            request_args=request_args, authn_method=client_auth_method, endpoint=self._client.introspection_endpoint)
 
         return token_introspection_response
 
@@ -306,19 +287,15 @@ class PyoidcFacade:
         """
         request_args = {
             'grant_type': 'client_credentials',
-            'client_id': self._client.client_id,
-            'client_secret': self._client.client_secret,
             **kwargs
         }
         if scope:
             request_args['scope'] = ' '.join(scope)
-        # Client Credentials Flow is implemented under oauth2 sub-package of
-        # the client in pyoidc.
-        _oauth2_client = Oauth2Client(client_authn_method=CLIENT_AUTHN_METHOD,
-                                      message_factory=CCMessageFactory,
-                                      settings=self._provider_configuration.requests_session)
-        access_token = _oauth2_client.do_access_token_request(request_args=request_args,
-                                                              endpoint=self._client.token_endpoint)
+        client_auth_method = self._client.registration_response.get('token_endpoint_auth_method',
+                                                                    'client_secret_basic')
+        access_token = self._oauth2_client.do_access_token_request(request_args=request_args,
+                                                                   authn_method=client_auth_method,
+                                                                   endpoint=self._client.token_endpoint)
         return access_token
 
     @property
