@@ -45,7 +45,7 @@ class TestProviderConfiguration:
 
         provider_config = ProviderConfiguration(issuer=self.PROVIDER_BASEURL,
                                                 client_registration_info=ClientRegistrationInfo())
-        provider_config.ensure_provider_metadata()
+        provider_config.ensure_provider_metadata(Client(CLIENT_AUTHN_METHOD))
         assert provider_config._provider_metadata['issuer'] == self.PROVIDER_BASEURL
         assert provider_config._provider_metadata['authorization_endpoint'] == self.PROVIDER_BASEURL + '/auth'
         assert provider_config._provider_metadata['jwks_uri'] == self.PROVIDER_BASEURL + '/jwks'
@@ -55,7 +55,7 @@ class TestProviderConfiguration:
         provider_config = ProviderConfiguration(provider_metadata=provider_metadata,
                                                 client_registration_info=ClientRegistrationInfo())
 
-        provider_config.ensure_provider_metadata()
+        provider_config.ensure_provider_metadata(Client(CLIENT_AUTHN_METHOD))
         assert provider_config._provider_metadata == provider_metadata
 
     @responses.activate

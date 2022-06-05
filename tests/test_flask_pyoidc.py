@@ -17,8 +17,8 @@ from urllib.parse import parse_qsl, urlparse, urlencode
 from werkzeug.exceptions import Forbidden, Unauthorized
 
 from flask_pyoidc import OIDCAuthentication
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ProviderMetadata, ClientMetadata, \
-    ClientRegistrationInfo
+from flask_pyoidc.provider_configuration import (ProviderConfiguration, ProviderMetadata, ClientMetadata,
+                                                 ClientRegistrationInfo)
 from flask_pyoidc.user_session import UserSession
 from werkzeug.routing import BuildError
 

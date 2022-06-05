@@ -3,13 +3,13 @@ import time
 
 import pytest
 import responses
-from oic.oic import AuthorizationResponse, AccessTokenResponse, TokenErrorResponse, OpenIDSchema, \
-    AuthorizationErrorResponse
-from urllib.parse import parse_qsl, urlparse
+from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
+                     TokenErrorResponse)
+from urllib.parse import parse_qsl
 
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
     ClientRegistrationInfo
-from flask_pyoidc.pyoidc_facade import PyoidcFacade, _ClientAuthentication
+from flask_pyoidc.pyoidc_facade import PyoidcFacade
 from .util import signed_id_token
 
 REDIRECT_URI = 'https://rp.example.com/redirect_uri'
@@ -133,12 +133,12 @@ class TestPyoidcFacade:
         assert parsed_auth_response['state'] == state
         assert parsed_auth_response['id_token_jwt'] == id_token
 
-    @pytest.mark.parametrize('request_func,expected_token_request', [
+    @pytest.mark.parametrize('request_func, expected_token_request', [
         (
-                lambda facade: facade.exchange_authorization_code('auth-code'),
+                lambda facade: facade.exchange_authorization_code('auth-code', 'test-state'),
                 {
                     'grant_type': 'authorization_code',
-                    'code': 'auth-code',
+                    'state': 'test-state',
                     'redirect_uri': REDIRECT_URI
                 }
         ),
@@ -165,14 +165,20 @@ class TestPyoidcFacade:
         }
         id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
         token_response = AccessTokenResponse(access_token='test_access_token',
+                                             refresh_token='refresh-token',
                                              token_type='Bearer',
-                                             id_token=id_token_jwt)
+                                             id_token=id_token_jwt,
+                                             expires_in=now + 1)
+
         responses.add(responses.POST, token_endpoint, json=token_response.to_dict())
 
         provider_metadata = self.PROVIDER_METADATA.copy(token_endpoint=token_endpoint)
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
+        grant = Grant(resp=token_response)
+        grant.grant_expiration_time = now + grant.exp_in
+        facade._client.grant = {'test-state': grant}
 
         responses.add(responses.GET,
                       self.PROVIDER_METADATA['jwks_uri'],
@@ -198,13 +204,17 @@ class TestPyoidcFacade:
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=provider_metadata,
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
-        assert facade.exchange_authorization_code('1234') == token_response
+        state = 'test-state'
+        grant = Grant()
+        grant.grant_expiration_time = int(time.time()) + grant.exp_in
+        facade._client.grant = {state: grant}
+        assert facade.exchange_authorization_code('1234', state) == token_response
 
     def test_token_request_handles_missing_provider_token_endpoint(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
-        assert facade.exchange_authorization_code('1234') is None
+        assert facade.exchange_authorization_code(None, None) is None
 
     @pytest.mark.parametrize('userinfo_http_method', [
         'GET',
@@ -244,8 +254,12 @@ class TestPyoidcFacade:
         assert facade.userinfo_request(None) is None
 
     @responses.activate
-    @pytest.mark.parametrize('scope', [None, ['read', 'write']])
-    def test_client_credentials_grant(self, scope):
+    @pytest.mark.parametrize('scope, extra_args',
+                             [(None, {}),
+                              (['read', 'write'],
+                               {'audience': ['client_id1, client_id2']})
+                              ])
+    def test_client_credentials_grant(self, scope, extra_args):
         token_endpoint = f'{self.PROVIDER_BASEURL}/token'
         provider_metadata = self.PROVIDER_METADATA.copy(
             token_endpoint=token_endpoint)
@@ -264,7 +278,7 @@ class TestPyoidcFacade:
         responses.add(responses.POST, token_endpoint,
                       json=client_credentials_grant_response)
         assert client_credentials_grant_response == facade.client_credentials_grant(
-            scope=scope, audience=['client_id1, client_id2']).to_dict()
+            scope=scope, **extra_args).to_dict()
 
     def test_post_logout_redirect_uris(self):
         post_logout_redirect_uris = ['https://client.example.com/logout']
@@ -274,32 +288,3 @@ class TestPyoidcFacade:
                                                     client_metadata=client_metadata),
                               REDIRECT_URI)
         assert facade.post_logout_redirect_uris == post_logout_redirect_uris
-
-
-class TestClientAuthentication(object):
-    CLIENT_ID = 'client1'
-    CLIENT_SECRET = 'secret1'
-
-    @property
-    def basic_auth(self):
-        credentials = '{}:{}'.format(self.CLIENT_ID, self.CLIENT_SECRET)
-        return 'Basic {}'.format(base64.urlsafe_b64encode(credentials.encode('utf-8')).decode('utf-8'))
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.client_auth = _ClientAuthentication(self.CLIENT_ID, self.CLIENT_SECRET)
-
-    def test_client_secret_basic(self):
-        request = {}
-        headers = self.client_auth('client_secret_basic', request)
-        assert headers == {'Authorization': self.basic_auth}
-        assert request == {}
-
-    def test_client_secret_post(self):
-        request = {}
-        headers = self.client_auth('client_secret_post', request)
-        assert headers is None
-        assert request == {'client_id': self.CLIENT_ID, 'client_secret': self.CLIENT_SECRET}
-
-    def test_defaults_to_client_secret_basic(self):
-        assert self.client_auth('invalid_client_auth_method', {}) == self.client_auth('client_secret_basic', {})
