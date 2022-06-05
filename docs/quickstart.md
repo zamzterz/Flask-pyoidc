@@ -213,3 +213,13 @@ auth.clients['default'].client_credentials_grant(
 auth.clients['default'].client_credentials_grant(
     scope=['read', 'write'], audience=['client_id1', 'client_id2'])
 ```
+
+## Token Revocation
+If you would like to disable an access or refresh token, simply send a request to the `/revoke` endpoint.
+
+> Note: Revoking a token that is invalid, expired, or already revoked returns a 200 OK status code to prevent any information leaks.
+
+```python
+auth.clients['default'].revoke_token(token='access_token',
+                                     token_type_hint='access_token')
+```

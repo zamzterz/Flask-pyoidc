@@ -1,4 +1,4 @@
-import base64
+import http
 import time
 
 import pytest
@@ -288,3 +288,31 @@ class TestPyoidcFacade:
                                                     client_metadata=client_metadata),
                               REDIRECT_URI)
         assert facade.post_logout_redirect_uris == post_logout_redirect_uris
+
+    @responses.activate
+    def test_revoke_token_should_always_return_200(self):
+        revocation_endpoint = f'{self.PROVIDER_BASEURL}/revoke'
+        provider_metadata = self.PROVIDER_METADATA.copy(
+            revocation_endpoint=revocation_endpoint)
+        facade = PyoidcFacade(
+            ProviderConfiguration(
+                provider_metadata=provider_metadata,
+                client_metadata=self.CLIENT_METADATA),
+            REDIRECT_URI)
+        request_args = {
+            'token': 'access_token_value',
+            'token_type_hint': 'access_token'
+        }
+        # Revoking a token that is invalid, expired, or already revoked
+        # returns a 200 OK status code to prevent any information leaks.
+        responses.add(
+            responses.POST,
+            revocation_endpoint,
+            body="",
+            status=200,
+            headers={"content-length": "0"},
+        )
+        resp = facade.revoke_token(**request_args)
+        revocation_request = dict(parse_qsl(responses.calls[0].request.body))
+        assert resp == 200
+        assert revocation_request == request_args

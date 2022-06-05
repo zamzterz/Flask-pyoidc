@@ -1,4 +1,4 @@
-import base64
+import http
 import logging
 
 from oic.extension.client import Client as ClientExtension
@@ -297,6 +297,44 @@ class PyoidcFacade:
                                                                    authn_method=client_auth_method,
                                                                    endpoint=self._client.token_endpoint)
         return access_token
+
+    def revoke_token(self, token: str, token_type_hint: str) -> http.HTTPStatus:
+        """Revokes access token & refresh token.
+
+        Parameters
+        ----------
+        token : str
+            Token to be revoked.
+        token_type_hint : str
+            A hint of the type of token. Valid values: access_token & refresh_token.
+
+        Returns
+        -------
+        http.HTTPStatus
+
+        Examples
+        --------
+        ::
+
+            auth = OIDCAuthentication({'default': provider_config},
+                                      access_token_required=True)
+            auth.init_app(app)
+            auth.clients['default'].revoke_token(token='access_token',
+                                                 token_type_hint='access_token')
+        """
+        request_args = {
+            'token': token,
+            'token_type_hint': token_type_hint
+        }
+        client_auth_method = self._client.registration_response.get('revocation_endpoint_auth_method',
+                                                                    'client_secret_basic')
+        token_revocation_response = self._client_extension.do_token_revocation(
+            request_args=request_args, authn_method=client_auth_method,
+            endpoint=self._client.revocation_endpoint
+        )
+        logger.debug(f'{token_type_hint} revoked')
+
+        return token_revocation_response
 
     @property
     def session_refresh_interval_seconds(self):
