@@ -266,8 +266,7 @@ class PyoidcFacade:
         --------
         ::
 
-            auth = OIDCAuthentication({'default': provider_config},
-                                      access_token_required=True)
+            auth = OIDCAuthentication({'default': provider_config})
             auth.init_app(app)
             auth.clients['default'].client_credentials_grant()
 
@@ -316,8 +315,7 @@ class PyoidcFacade:
         --------
         ::
 
-            auth = OIDCAuthentication({'default': provider_config},
-                                      access_token_required=True)
+            auth = OIDCAuthentication({'default': provider_config})
             auth.init_app(app)
             auth.clients['default'].revoke_token(token='access_token',
                                                  token_type_hint='access_token')
