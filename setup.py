@@ -15,7 +15,7 @@ setup(
     description='Flask extension for OpenID Connect authentication.',
     install_requires=[
         'oic>=1.4.0',
-        'cachetools>=5.2.0'
+        'cachetools>=5.2.0',
         'Flask',
         'requests',
         'importlib_resources'
