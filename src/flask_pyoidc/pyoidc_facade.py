@@ -1,6 +1,6 @@
-import base64
 import logging
 
+import cachetools
 from oic.extension.client import Client as ClientExtension
 from oic.extension.message import TokenIntrospectionResponse
 from oic.oauth2 import Client as Oauth2Client
@@ -216,6 +216,7 @@ class PyoidcFacade:
 
         return userinfo_response
 
+    @cachetools.cachedmethod(cache=lambda self: self._provider_configuration._cache)
     def _token_introspection_request(self, access_token: str) -> TokenIntrospectionResponse:
         """Make token introspection request.
 
@@ -237,7 +238,8 @@ class PyoidcFacade:
                                                                     'client_secret_basic')
         logger.info('making token introspection request')
         token_introspection_response = self._client_extension.do_token_introspection(
-            request_args=request_args, authn_method=client_auth_method, endpoint=self._client.introspection_endpoint)
+            request_args=request_args, authn_method=client_auth_method,
+            endpoint=self._client.introspection_endpoint)
 
         return token_introspection_response
 

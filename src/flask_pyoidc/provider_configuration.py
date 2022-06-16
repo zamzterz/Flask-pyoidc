@@ -1,6 +1,7 @@
 import collections.abc
 import logging
 
+import cachetools
 import requests
 from oic.oic import Client
 from oic.utils.settings import ClientSettings
@@ -128,6 +129,8 @@ class ProviderConfiguration:
     """
 
     DEFAULT_REQUEST_TIMEOUT = 5
+    DEFAULT_CACHE_MAXSIZE = 1024
+    DEFAULT_CACHE_TTL = 300  # in seconds
 
     def __init__(self,
                  issuer=None,
@@ -173,6 +176,8 @@ class ProviderConfiguration:
         # For session persistence
         self.client_settings = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
                                               requests_session=requests_session or requests.Session())
+        # For caching token introspection request
+        self._cache = cachetools.TTLCache(maxsize=self.DEFAULT_CACHE_MAXSIZE, ttl=self.DEFAULT_CACHE_TTL)
 
     def ensure_provider_metadata(self, client: Client):
         if not self._provider_metadata:
