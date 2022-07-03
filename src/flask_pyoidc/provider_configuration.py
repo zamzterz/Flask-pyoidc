@@ -130,7 +130,7 @@ class ProviderConfiguration:
 
     DEFAULT_REQUEST_TIMEOUT = 5
     DEFAULT_CACHE_MAXSIZE = 1024
-    DEFAULT_CACHE_TTL = 300  # in seconds
+    DEFAULT_CACHE_TTL = 0  # in seconds
 
     def __init__(self,
                  issuer=None,
@@ -140,7 +140,8 @@ class ProviderConfiguration:
                  client_metadata=None,
                  auth_request_params=None,
                  session_refresh_interval_seconds=None,
-                 requests_session=None):
+                 requests_session=None,
+                 token_introspection_cache_config: dict=None):
         """
         Args:
             issuer (str): OP Issuer Identifier. If this is specified discovery will be used to fetch the provider
@@ -156,6 +157,8 @@ class ProviderConfiguration:
             session_refresh_interval_seconds (int): Length of interval (in seconds) between attempted user data
                 refreshes.
             requests_session (requests.Session): custom requests object to allow for example retry handling, etc.
+            introspection_cache_configuration (dict): configure cache maxsize and time-to-live.
+                E.g. {'maxsize': 1024, 'ttl': 300}. The unit of ttl is in seconds.
         """
 
         if not issuer and not provider_metadata:
@@ -163,6 +166,9 @@ class ProviderConfiguration:
 
         if not client_registration_info and not client_metadata:
             raise ValueError("Specify either 'client_registration_info' or 'client_metadata'.")
+        
+        if not token_introspection_cache_config:
+            token_introspection_cache_config = {}
 
         self._issuer = issuer
         self._provider_metadata = provider_metadata
@@ -177,7 +183,9 @@ class ProviderConfiguration:
         self.client_settings = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
                                               requests_session=requests_session or requests.Session())
         # For caching token introspection request
-        self._cache = cachetools.TTLCache(maxsize=self.DEFAULT_CACHE_MAXSIZE, ttl=self.DEFAULT_CACHE_TTL)
+        self._cache = cachetools.TTLCache(
+            maxsize=token_introspection_cache_config.get('maxsize') or self.DEFAULT_CACHE_MAXSIZE,
+            ttl=token_introspection_cache_config.get('ttl') or self.DEFAULT_CACHE_TTL)
 
     def ensure_provider_metadata(self, client: Client):
         if not self._provider_metadata:
