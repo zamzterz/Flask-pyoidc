@@ -129,7 +129,7 @@ class ProviderConfiguration:
     """
 
     DEFAULT_REQUEST_TIMEOUT = 5
-    DEFAULT_CACHE_MAXSIZE = 1024
+    DEFAULT_CACHE_MAXSIZE = 0
     DEFAULT_CACHE_TTL = 0  # in seconds
 
     def __init__(self,
