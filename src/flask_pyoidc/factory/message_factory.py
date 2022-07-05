@@ -2,5 +2,5 @@ from oic.oauth2.message import AccessTokenResponse, CCAccessTokenRequest, Messag
 
 
 class CCMessageFactory(OauthMessageFactory):
-    """Client Credential Request Factory."""
+    """Client Credentials Request Factory."""
     token_endpoint = MessageTuple(CCAccessTokenRequest, AccessTokenResponse)

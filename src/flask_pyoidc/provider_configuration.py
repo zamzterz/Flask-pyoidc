@@ -1,10 +1,11 @@
 import collections.abc
 import logging
 
-import cachetools
 import requests
 from oic.oic import Client
 from oic.utils.settings import ClientSettings
+
+from .factory import TokenIntrospectionCacheFactory
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class ProviderConfiguration:
                  auth_request_params=None,
                  session_refresh_interval_seconds=None,
                  requests_session=None,
-                 token_introspection_cache_config: dict=None):
+                 token_introspection_cache_config: dict = None):
         """
         Args:
             issuer (str): OP Issuer Identifier. If this is specified discovery will be used to fetch the provider
@@ -157,7 +158,7 @@ class ProviderConfiguration:
             session_refresh_interval_seconds (int): Length of interval (in seconds) between attempted user data
                 refreshes.
             requests_session (requests.Session): custom requests object to allow for example retry handling, etc.
-            introspection_cache_configuration (dict): configure cache maxsize and time-to-live.
+            token_introspection_cache_config (dict): configure cache maxsize and time-to-live.
                 E.g. {'maxsize': 1024, 'ttl': 300}. The unit of ttl is in seconds.
         """
 
@@ -183,7 +184,7 @@ class ProviderConfiguration:
         self.client_settings = ClientSettings(timeout=self.DEFAULT_REQUEST_TIMEOUT,
                                               requests_session=requests_session or requests.Session())
         # For caching token introspection request
-        self._cache = cachetools.TTLCache(
+        self._cache = TokenIntrospectionCacheFactory(
             maxsize=token_introspection_cache_config.get('maxsize') or self.DEFAULT_CACHE_MAXSIZE,
             ttl=token_introspection_cache_config.get('ttl') or self.DEFAULT_CACHE_TTL)
 

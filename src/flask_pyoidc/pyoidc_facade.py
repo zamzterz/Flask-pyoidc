@@ -10,7 +10,7 @@ from oic.oic import Token
 from oic.oic.message import AuthorizationResponse, ProviderConfigurationResponse, RegistrationResponse
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
-from .message_factory import CCMessageFactory
+from .factory import CCMessageFactory
 
 logger = logging.getLogger(__name__)
 
