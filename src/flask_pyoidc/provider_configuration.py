@@ -208,14 +208,10 @@ class ProviderConfiguration:
                 raise ValueError("Can't use dynamic client registration, provider metadata is missing "
                                  "'registration_endpoint'.")
 
-            registration_request = self._client_registration_info.to_dict()
-
             # Send request to register the client dynamically.
-            registration_response = client.register(
-                url=self._provider_metadata['registration_endpoint'],
-                **registration_request)
+            registration_response = client.register(url=self._provider_metadata['registration_endpoint'],
+                                                    **self._client_registration_info)
             logger.info('Received registration response.')
-            self._client_metadata = ClientMetadata(
-                **registration_response.to_dict())
+            self._client_metadata = ClientMetadata(**registration_response)
 
         return self._client_metadata

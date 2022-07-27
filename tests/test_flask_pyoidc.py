@@ -860,7 +860,8 @@ class TestOIDCAuthentication:
             }
             token_introspection_response = {
                 'active': True,
-                'aud': ['admin', 'user']
+                'aud': ['admin', 'user'],
+                'exp': time.time()
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
@@ -880,7 +881,8 @@ class TestOIDCAuthentication:
             token_introspection_response = {
                 'active': True,
                 'aud': ['admin', 'user', self.CLIENT_ID],
-                'scope': ['read', 'write']
+                'scope': ['read', 'write'],
+                'exp': time.time()
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
@@ -902,7 +904,8 @@ class TestOIDCAuthentication:
                 'active': True,
                 'aud': ['admin', 'user', self.CLIENT_ID],
                 'scope': 'read write delete',
-                'client_id': self.CLIENT_ID
+                'client_id': self.CLIENT_ID,
+                'exp': int(time.time())
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
@@ -930,7 +933,8 @@ class TestOIDCAuthentication:
             'active': True,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': self.CLIENT_ID
+            'client_id': self.CLIENT_ID,
+            'exp': int(time.time())
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
@@ -1016,7 +1020,8 @@ class TestOIDCAuthentication:
             'active': True,
             'aud': ['admin', 'user', self.CLIENT_ID],
             'scope': 'read write delete',
-            'client_id': self.CLIENT_ID
+            'client_id': self.CLIENT_ID,
+            'exp': int(time.time())
         }
         responses.add(responses.POST, introspection_endpoint,
                       json=token_introspection_response)
