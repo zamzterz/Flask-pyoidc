@@ -895,7 +895,9 @@ class TestOIDCAuthentication:
 
         introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
         authn = self.init_app(provider_metadata_extras={
-            'introspection_endpoint': introspection_endpoint})
+            'introspection_endpoint': introspection_endpoint},
+            token_introspection_cache_config={'maxsize': 1, 'ttl': 0}
+        )
         with self.app.test_request_context('/'):
             flask.request.headers = {
                 'Authorization': 'Bearer access_token'
@@ -905,7 +907,7 @@ class TestOIDCAuthentication:
                 'aud': ['admin', 'user', self.CLIENT_ID],
                 'scope': 'read write delete',
                 'client_id': self.CLIENT_ID,
-                'exp': int(time.time())
+                'exp': int(time.time()) + 1
             }
             responses.add(responses.POST, introspection_endpoint,
                           json=token_introspection_response)
