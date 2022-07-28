@@ -6,7 +6,7 @@ with open('README.md') as f:
 setup(
     name='Flask-pyoidc',
     version='3.11.0',
-    packages=['flask_pyoidc'],
+    packages=['flask_pyoidc', 'flask_pyoidc.factory'],
     package_dir={'': 'src'},
     url='https://github.com/zamzterz/flask-pyoidc',
     license='Apache 2.0',
