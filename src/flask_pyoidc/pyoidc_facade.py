@@ -44,7 +44,7 @@ class PyoidcFacade:
 
         if self._provider_configuration.registered_client_metadata:
             client_metadata = self._provider_configuration.registered_client_metadata.to_dict()
-            client_metadata.update(redirect_uris=list(redirect_uri))
+            client_metadata.update(redirect_uris=[redirect_uri])
             self._store_registration_info(client_metadata)
 
         self._redirect_uri = redirect_uri
