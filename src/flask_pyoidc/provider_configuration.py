@@ -193,7 +193,7 @@ class ProviderConfiguration:
             resp = client.provider_config(self._issuer)
             logger.debug(f'Received discovery response: {resp.to_dict()}')
 
-            self._provider_metadata = ProviderMetadata(**resp.to_dict())
+            self._provider_metadata = ProviderMetadata(**resp)
 
         return self._provider_metadata
 

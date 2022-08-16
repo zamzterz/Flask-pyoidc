@@ -39,11 +39,11 @@ class PyoidcFacade:
                                            settings=self._provider_configuration.client_settings)
 
         provider_metadata = provider_configuration.ensure_provider_metadata(self._client)
-        self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
+        self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata),
                                             provider_metadata['issuer'])
 
         if self._provider_configuration.registered_client_metadata:
-            client_metadata = self._provider_configuration.registered_client_metadata.to_dict()
+            client_metadata = self._provider_configuration.registered_client_metadata
             client_metadata.update(redirect_uris=list(redirect_uri))
             self._store_registration_info(client_metadata)
 
