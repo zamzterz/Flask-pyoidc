@@ -6,7 +6,8 @@ from oic.extension.message import TokenIntrospectionResponse
 
 class TokenIntrospectionCacheFactory(cachetools.TTLCache):
     """Time aware caching factory for token introspection parameters and response."""
-    def __setitem__(self, key, token_introspection_response: TokenIntrospectionResponse) -> None:
+    def __setitem__(self, key, token_introspection_response: TokenIntrospectionResponse,
+                    cache_setitem=cachetools.Cache.__setitem__) -> None:
         """Stores cache of token introspection.
 
         Parameters
@@ -28,6 +29,6 @@ class TokenIntrospectionCacheFactory(cachetools.TTLCache):
             if expires_in_seconds < time_to_live:
                 # Set the attribute to the expiry time of access token.
                 self._TTLCache__ttl = expires_in_seconds
-        super().__setitem__(key, token_introspection_response)
+        super().__setitem__(key, token_introspection_response, cache_setitem)
         # Revert the value of the attribute to the one provided by the user.
         self._TTLCache__ttl = time_to_live
