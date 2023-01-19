@@ -163,7 +163,10 @@ class OIDCAuthentication:
         logger.debug('received authentication response: %s', authn_resp.to_json())
 
         try:
-            result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request)
+            if "OIDC_CLOCK_SKEW" in current_app.config:
+                result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request, skew=current_app.config["OIDC_CLOCK_SKEW"])
+            else:
+                result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request)
         except AuthResponseErrorResponseError as e:
             return self._handle_error_response(e.error_response, is_processing_fragment_encoded_response)
         except AuthResponseProcessError as e:
