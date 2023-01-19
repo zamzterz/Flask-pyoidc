@@ -49,7 +49,7 @@ class AuthResponseHandler:
         """
         self._client = client
 
-    def process_auth_response(self, auth_response, auth_request):
+    def process_auth_response(self, auth_response, auth_request, **kwargs):
         """
         Args:
             auth_response (Union[AuthorizationResponse, AuthorizationErrorResponse]): parsed OIDC auth response
@@ -72,7 +72,8 @@ class AuthResponseHandler:
 
         if 'code' in auth_response:
             token_resp = self._client.exchange_authorization_code(auth_response['code'],
-                                                                  auth_response['state'])
+                                                                  auth_response['state'],
+                                                                  **kwargs)
             if token_resp:
                 if 'error' in token_resp:
                     raise AuthResponseErrorResponseError(token_resp.to_dict())

@@ -118,7 +118,7 @@ class PyoidcFacade:
             auth_resp['id_token_jwt'] = response_params['id_token']
         return auth_resp
 
-    def exchange_authorization_code(self, authorization_code: str, state: str):
+    def exchange_authorization_code(self, authorization_code: str, state: str, **kwargs):
         """Requests tokens from an authorization code.
 
         Parameters
@@ -147,8 +147,8 @@ class PyoidcFacade:
         token_response = self._client.do_access_token_request(state=state,
                                                               request_args=request_args,
                                                               authn_method=client_auth_method,
-                                                              endpoint=self._client.token_endpoint
-                                                              )
+                                                              endpoint=self._client.token_endpoint,
+                                                              **kwargs)
         logger.info('Received token response.')
 
         return token_response
