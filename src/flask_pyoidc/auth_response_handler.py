@@ -49,11 +49,12 @@ class AuthResponseHandler:
         """
         self._client = client
 
-    def process_auth_response(self, auth_response, auth_request, **kwargs):
+    def process_auth_response(self, auth_response, auth_request, extra_token_args):
         """
         Args:
             auth_response (Union[AuthorizationResponse, AuthorizationErrorResponse]): parsed OIDC auth response
             auth_request (Mapping[str, str]): original OIDC auth request
+            extra_token_args  (Mapping[str, Any]): extra arguments to pass to pyoidc
         Returns:
             AuthenticationResult: All relevant data associated with the authenticated user
         """
@@ -73,7 +74,7 @@ class AuthResponseHandler:
         if 'code' in auth_response:
             token_resp = self._client.exchange_authorization_code(auth_response['code'],
                                                                   auth_response['state'],
-                                                                  **kwargs)
+                                                                  extra_token_args)
             if token_resp:
                 if 'error' in token_resp:
                     raise AuthResponseErrorResponseError(token_resp.to_dict())

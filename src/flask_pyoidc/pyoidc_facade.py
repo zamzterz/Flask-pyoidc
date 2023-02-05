@@ -1,5 +1,6 @@
 import base64
 import logging
+from typing import Any
 
 from oic.extension.client import Client as ClientExtension
 from oic.extension.message import TokenIntrospectionResponse
@@ -118,7 +119,7 @@ class PyoidcFacade:
             auth_resp['id_token_jwt'] = response_params['id_token']
         return auth_resp
 
-    def exchange_authorization_code(self, authorization_code: str, state: str, **kwargs):
+    def exchange_authorization_code(self, authorization_code: str, state: str, extra_token_args: [str, Any]):
         """Requests tokens from an authorization code.
 
         Parameters
@@ -127,6 +128,8 @@ class PyoidcFacade:
             authorization code issued to client after user authorization
         state: str
             state is used to keep track of responses to outstanding requests.
+        extra_token_args: [str, Any]
+            extra arguments to pass to pyoidc
 
         Returns
         -------
@@ -148,7 +151,7 @@ class PyoidcFacade:
                                                               request_args=request_args,
                                                               authn_method=client_auth_method,
                                                               endpoint=self._client.token_endpoint,
-                                                              **kwargs)
+                                                              **extra_token_args)
         logger.info('Received token response.')
 
         return token_response
