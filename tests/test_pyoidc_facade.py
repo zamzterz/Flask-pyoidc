@@ -25,7 +25,14 @@ class TestPyoidcFacade:
     def test_registered_client_metadata_is_forwarded_to_pyoidc(self):
         config = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA, client_metadata=self.CLIENT_METADATA)
         facade = PyoidcFacade(config, REDIRECT_URI)
-        assert facade._client.registration_response
+
+        expected = {
+            'client_id': self.CLIENT_METADATA['client_id'],
+            'client_secret': self.CLIENT_METADATA['client_secret'],
+            'redirect_uris': [REDIRECT_URI],
+            'token_endpoint_auth_method': 'client_secret_basic'
+        }
+        assert facade._client.registration_response.to_dict() == expected
 
     def test_no_registered_client_metadata_is_handled(self):
         config = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
