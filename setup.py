@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name='Flask-pyoidc',
-    version='3.11.0',
+    version='3.12.0',
     packages=['flask_pyoidc'],
     package_dir={'': 'src'},
     url='https://github.com/zamzterz/flask-pyoidc',
@@ -14,7 +14,7 @@ setup(
     author_email='samuel.gulliksson@gmail.com',
     description='Flask extension for OpenID Connect authentication.',
     install_requires=[
-        'oic>=1.4.0',
+        'oic==1.4.0',
         'Flask',
         'requests',
         'importlib_resources'
