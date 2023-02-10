@@ -1,15 +1,14 @@
-import base64
 import time
+from urllib.parse import parse_qsl
 
 import pytest
 import responses
-from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
-                     TokenErrorResponse)
-from urllib.parse import parse_qsl
-
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
     ClientRegistrationInfo
 from flask_pyoidc.pyoidc_facade import PyoidcFacade
+from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
+                     TokenErrorResponse)
+
 from .util import signed_id_token
 
 REDIRECT_URI = 'https://rp.example.com/redirect_uri'
