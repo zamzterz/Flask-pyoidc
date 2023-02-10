@@ -19,7 +19,7 @@ class OIDCData(collections.abc.MutableMapping):
             args (List[Tuple[String, String]]): key-value pairs to store
             kwargs (Dict[string, string]): key-value pairs to store
         """
-        self.store = dict()
+        self.store = {}
         self.update(dict(*args, **kwargs))
 
     def __getitem__(self, key):
@@ -109,7 +109,7 @@ class ClientMetadata(OIDCData):
                 the OP
             kwargs (dict): key-value pairs
         """
-        super(ClientMetadata, self).__init__(client_id=client_id, client_secret=client_secret, **kwargs)
+        super().__init__(client_id=client_id, client_secret=client_secret, **kwargs)
 
 
 class ProviderConfiguration:

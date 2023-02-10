@@ -1,4 +1,3 @@
-import base64
 import logging
 
 from oic.extension.client import Client as ClientExtension

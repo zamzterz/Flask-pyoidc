@@ -1,11 +1,11 @@
-import pytest
 import time
 from unittest.mock import patch
 
+import pytest
 from flask_pyoidc.user_session import UserSession, UninitialisedSession
 
 
-class TestUserSession(object):
+class TestUserSession:
     PROVIDER_NAME = 'test_provider'
 
     def initialised_session(self, session_storage):
