@@ -681,7 +681,8 @@ class TestOIDCAuthentication:
         error_response = {'error': 'invalid_request', 'error_description': 'test error', 'state': state}
         config = {
             'provider_configuration_info': {'issuer': self.PROVIDER_BASEURL},
-            'client_registration_info': {'client_id': 'abc', 'client_secret': 'foo'}}
+            'client_registration_info': {'client_id': 'abc', 'client_secret': 'foo'}
+        }
         authn = self.init_app(config)
         with self.app.test_request_context(f'/redirect_uri?{urlencode(error_response)}'):
             UserSession(flask.session, self.PROVIDER_NAME)
