@@ -2,7 +2,6 @@ import base64
 
 import pytest
 import responses
-
 from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientRegistrationInfo, ProviderMetadata, \
     ClientMetadata, OIDCData
 from oic.oic import Client
@@ -183,5 +182,5 @@ class TestOIDCData:
     def test_del_and_len(self):
         data = OIDCData(abc='xyz', qwe='rty')
         assert len(data) == 2
-        data.__delitem__('qwe')
+        del data['qwe']
         assert data.to_dict() == {'abc': 'xyz'}

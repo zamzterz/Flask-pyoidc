@@ -167,10 +167,10 @@ class OIDCAuthentication:
             if 'OIDC_CLOCK_SKEW' in current_app.config:
                 extra_token_args['skew'] = current_app.config['OIDC_CLOCK_SKEW']
             result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request, extra_token_args)
-        except AuthResponseErrorResponseError as e:
-            return self._handle_error_response(e.error_response, is_processing_fragment_encoded_response)
-        except AuthResponseProcessError as e:
-            return self._handle_error_response({'error': 'unexpected_error', 'error_description': str(e)},
+        except AuthResponseErrorResponseError as ex:
+            return self._handle_error_response(ex.error_response, is_processing_fragment_encoded_response)
+        except AuthResponseProcessError as ex:
+            return self._handle_error_response({'error': 'unexpected_error', 'error_description': str(ex)},
                                                is_processing_fragment_encoded_response)
 
         if current_app.config.get('OIDC_SESSION_PERMANENT', True):
@@ -211,8 +211,7 @@ class OIDCAuthentication:
 
         if provider_name not in self._provider_configurations:
             raise ValueError(
-                "Provider name '{}' not in configured providers: {}.".format(provider_name,
-                                                                             self._provider_configurations.keys())
+                f"Provider name '{provider_name}' not in configured providers: {self._provider_configurations.keys()}."
             )
 
         def oidc_decorator(view_func):
@@ -241,7 +240,7 @@ class OIDCAuthentication:
         logger.debug('user logout')
         try:
             session = UserSession(flask.session)
-        except UninitialisedSession as e:
+        except UninitialisedSession:
             logger.info('user was already logged out, doing nothing')
             return None
 
@@ -393,19 +392,19 @@ class OIDCAuthentication:
         logger.debug(result)
         # Check if access_token is valid, active can be True or False
         if not result.get('active'):
-            return
+            return None
         # Check if client_id is in audience claim
         if client._client.client_id not in result['aud']:
             # log the exception if client_id is not in audience and returns
             # False, you can configure audience with Identity Provider
             logger.info('Token is valid but required audience is missing.')
-            return
+            return None
         # Check if the scopes associated with the access_token are the ones
         # required by the endpoint and not something else which is not
         # permitted.
         if scopes and not set(scopes).issubset(set(result['scope'])):
             logger.info('Token is valid but does not have required scopes.')
-            return
+            return None
         return result
 
     def token_auth(self, provider_name, scopes_required: list = None):

@@ -40,7 +40,7 @@ class TestAuthResponseHandler:
         with pytest.raises(AuthResponseUnexpectedStateError):
             AuthResponseHandler(client_mock).process_auth_response(self.AUTH_RESPONSE, auth_request)
 
-    def test_should_detect_nonce_mismatch(self, client_mock):
+    def test_should_detect_nonce_mismatch(self):
         client = PyoidcFacade(
             ProviderConfiguration(provider_metadata=ProviderMetadata(issuer=self.ISSUER),
                                   client_metadata=ClientMetadata(client_id=self.CLIENT_ID)),
@@ -93,7 +93,7 @@ class TestAuthResponseHandler:
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
-        assert result.refresh_token == None
+        assert result.refresh_token is None
 
     def test_should_handle_token_response_without_id_token(self, client_mock):
         token_response = {'access_token': 'test_token'}

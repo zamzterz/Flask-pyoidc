@@ -89,8 +89,8 @@ class AuthResponseHandler:
 
                     try:
                         self._client.verify_id_token(id_token, auth_request)
-                    except PyoidcError as e:
-                        raise InvalidIdTokenError(str(e))
+                    except PyoidcError as ex:
+                        raise InvalidIdTokenError(str(ex)) from ex
 
                     id_token_claims = id_token.to_dict()
                     id_token_jwt = token_resp.get('id_token_jwt')

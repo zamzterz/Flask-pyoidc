@@ -1,25 +1,24 @@
 import json
 import logging
+import time
+from datetime import datetime
+from http.cookies import SimpleCookie
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qsl, urlparse, urlencode
 
 import flask
 import pytest
 import responses
-import time
-from datetime import datetime
 from flask import Flask
-from flask_pyoidc.redirect_uri_config import RedirectUriConfig
-from http.cookies import SimpleCookie
-from jwkest import jws
-from oic.oic import AuthorizationResponse
-from oic.oic.message import IdToken
-from unittest.mock import MagicMock, patch
-from urllib.parse import parse_qsl, urlparse, urlencode
-from werkzeug.exceptions import Forbidden, Unauthorized
-
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import (ProviderConfiguration, ProviderMetadata, ClientMetadata,
                                                  ClientRegistrationInfo)
+from flask_pyoidc.redirect_uri_config import RedirectUriConfig
 from flask_pyoidc.user_session import UserSession
+from jwkest import jws
+from oic.oic import AuthorizationResponse
+from oic.oic.message import IdToken
+from werkzeug.exceptions import Forbidden, Unauthorized
 from werkzeug.routing import BuildError
 
 from .util import signed_id_token
@@ -302,7 +301,7 @@ class TestOIDCAuthentication:
         authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint,
                                                         'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
-        with self.app.test_request_context('/redirect_uri?state={}&code=test'.format(state)):
+        with self.app.test_request_context(f'/redirect_uri?state={state}&code=test'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['destination'] = '/'
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
@@ -348,7 +347,7 @@ class TestOIDCAuthentication:
         userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
         responses.add(responses.GET, userinfo_endpoint, json=userinfo)
 
-        authn = self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
+        self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
         auth_response = AuthorizationResponse(
             **{'state': state, 'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt})
@@ -359,7 +358,7 @@ class TestOIDCAuthentication:
                 session['destination'] = '/'
                 session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
                 session['fragment_encoded_response'] = True
-            client.get('/redirect_uri#{}'.format(auth_response.to_urlencoded()))
+            client.get(f'/redirect_uri#{auth_response.to_urlencoded()}')
             assert 'auth_request' in session  # stored auth_request should not have been removed yet
 
             # fake the POST request from the 'parse_fragment.html' template
@@ -491,7 +490,7 @@ class TestOIDCAuthentication:
                 UserSession(session, self.PROVIDER_NAME)
                 session['destination'] = '/'
                 session['auth_request'] = json.dumps({'state': state, 'nonce': nonce, 'response_type': 'code'})
-            resp = client.get('/redirect_uri?state={}&code=test'.format(state))
+            resp = client.get(f'/redirect_uri?state={state}&code=test')
 
         cookies = SimpleCookie()
         cookies.load(resp.headers['Set-Cookie'])
@@ -528,7 +527,7 @@ class TestOIDCAuthentication:
         assert end_session_redirect.location.startswith(end_session_endpoint)
         assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
 
-        assert parsed_request['post_logout_redirect_uri'] == 'http://{}/logout'.format(self.CLIENT_DOMAIN)
+        assert parsed_request['post_logout_redirect_uri'] == f'http://{self.CLIENT_DOMAIN}/logout'
         assert not logout_view_mock.called
 
     @responses.activate
@@ -634,7 +633,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         logout_view_mock = self.get_view_mock()
         state = 'end_session_123'
-        with self.app.test_request_context('/logout?state={}'.format(state)):
+        with self.app.test_request_context(f'/logout?state={state}'):
             flask.session['end_session_state'] = state
             result = authn.oidc_logout(logout_view_mock)()
             assert 'end_session_state' not in flask.session
@@ -645,7 +644,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         logout_view_mock = self.get_view_mock()
         state = 'some_state'
-        with self.app.test_request_context('/logout?state={}'.format(state)):
+        with self.app.test_request_context(f'/logout?state={state}'):
             flask.session['end_session_state'] = 'other_state'
             result = authn.oidc_logout(logout_view_mock)()
             assert 'end_session_state' not in flask.session
@@ -653,7 +652,7 @@ class TestOIDCAuthentication:
         self.assert_view_mock(logout_view_mock, result)
         assert caplog.record_tuples[-1] == ('flask_pyoidc.flask_pyoidc',
                                             logging.ERROR,
-                                            "Got unexpected state '{}' after logout redirect.".format(state))
+                                            f"Got unexpected state '{state}' after logout redirect.")
 
     def test_logout_handles_no_user_session(self):
         authn = self.init_app()
@@ -669,8 +668,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         error_view_mock = self.get_view_mock()
         authn.error_view(error_view_mock)
-        with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(error=urlencode(error_response),
-                                                                                        state=state)):
+        with self.app.test_request_context(f'/redirect_uri?{urlencode(error_response)}&state={state}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': 'test_nonce'})
             result = authn._handle_authentication_response()
@@ -681,9 +679,12 @@ class TestOIDCAuthentication:
     def test_authentication_error_response_returns_default_error_if_no_error_view_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error', 'state': state}
-        authn = self.init_app(dict(provider_configuration_info={'issuer': self.PROVIDER_BASEURL},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo')))
-        with self.app.test_request_context('/redirect_uri?{}'.format(urlencode(error_response))):
+        config = {
+            'provider_configuration_info': {'issuer': self.PROVIDER_BASEURL},
+            'client_registration_info': {'client_id': 'abc', 'client_secret': 'foo'}
+        }
+        authn = self.init_app(config)
+        with self.app.test_request_context(f'/redirect_uri?{urlencode(error_response)}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
             flask.session['nonce'] = 'test_nonce'
@@ -700,7 +701,7 @@ class TestOIDCAuthentication:
         error_view_mock = self.get_view_mock()
         authn.error_view(error_view_mock)
         state = 'test_tate'
-        with self.app.test_request_context('/redirect_uri?code=foo&state={}'.format(state)):
+        with self.app.test_request_context(f'/redirect_uri?code=foo&state={state}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': 'test_nonce'})
             result = authn._handle_authentication_response()
