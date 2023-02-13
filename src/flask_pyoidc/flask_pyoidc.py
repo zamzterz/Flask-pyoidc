@@ -164,7 +164,7 @@ class OIDCAuthentication:
 
         try:
             extra_token_args = {}
-            if "OIDC_CLOCK_SKEW" in current_app.config:
+            if 'OIDC_CLOCK_SKEW' in current_app.config:
                 extra_token_args['skew'] = current_app.config['OIDC_CLOCK_SKEW']
             result = AuthResponseHandler(client).process_auth_response(authn_resp, auth_request, extra_token_args)
         except AuthResponseErrorResponseError as e:

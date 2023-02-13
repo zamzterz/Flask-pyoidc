@@ -11,7 +11,7 @@ from flask_pyoidc.redirect_uri_config import RedirectUriConfig
 from http.cookies import SimpleCookie
 from jwkest import jws
 from oic.oic import AuthorizationResponse
-from oic.oic.message import IdToken, IATError
+from oic.oic.message import IdToken
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qsl, urlparse, urlencode
 from werkzeug.exceptions import Forbidden, Unauthorized
