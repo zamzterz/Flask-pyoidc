@@ -141,7 +141,7 @@ class TestPyoidcFacade:
 
     @pytest.mark.parametrize('request_func, expected_token_request', [
         (
-                lambda facade: facade.exchange_authorization_code('auth-code', 'test-state'),
+                lambda facade: facade.exchange_authorization_code('auth-code', 'test-state', {}),
                 {
                     'grant_type': 'authorization_code',
                     'state': 'test-state',
@@ -214,13 +214,13 @@ class TestPyoidcFacade:
         grant = Grant()
         grant.grant_expiration_time = int(time.time()) + grant.exp_in
         facade._client.grant = {state: grant}
-        assert facade.exchange_authorization_code('1234', state) == token_response
+        assert facade.exchange_authorization_code('1234', state, {}) == token_response
 
     def test_token_request_handles_missing_provider_token_endpoint(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
                                                     client_metadata=self.CLIENT_METADATA),
                               REDIRECT_URI)
-        assert facade.exchange_authorization_code(None, None) is None
+        assert facade.exchange_authorization_code(None, None, {}) is None
 
     @pytest.mark.parametrize('userinfo_http_method', [
         'GET',
