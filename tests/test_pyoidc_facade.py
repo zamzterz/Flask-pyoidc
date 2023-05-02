@@ -3,11 +3,16 @@ from urllib.parse import parse_qsl
 
 import pytest
 import responses
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
-    ClientRegistrationInfo
-from flask_pyoidc.pyoidc_facade import PyoidcFacade
-from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
+from oic.oauth2.exception import HttpError
+from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse,
+                     AuthorizationResponse, Grant, OpenIDSchema,
                      TokenErrorResponse)
+
+from flask_pyoidc.provider_configuration import (ClientMetadata,
+                                                 ClientRegistrationInfo,
+                                                 ProviderConfiguration,
+                                                 ProviderMetadata)
+from flask_pyoidc.pyoidc_facade import PyoidcFacade
 
 from .util import signed_id_token
 
@@ -214,7 +219,8 @@ class TestPyoidcFacade:
         grant = Grant()
         grant.grant_expiration_time = int(time.time()) + grant.exp_in
         facade._client.grant = {state: grant}
-        assert facade.exchange_authorization_code('1234', state, {}) == token_response
+        with pytest.raises(HttpError):
+            facade.exchange_authorization_code('1234', state, {})
 
     def test_token_request_handles_missing_provider_token_endpoint(self):
         facade = PyoidcFacade(ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA,
