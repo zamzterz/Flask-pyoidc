@@ -944,7 +944,7 @@ class TestOIDCAuthentication:
             authn.token_auth(self.PROVIDER_NAME,
                              scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+            assert flask.g.current_token_identity == token_introspection_response
 
     @responses.activate
     def test_token_auth_should_raise_forbidden_if_invalid_token(self):
@@ -1031,7 +1031,7 @@ class TestOIDCAuthentication:
                 self.PROVIDER_NAME,
                 scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+            assert flask.g.current_token_identity == token_introspection_response
 
     def test_get_url_for_logout_view_should_raise_build_error_if_mounted_under_custom_endpoint(self):
         authn = self.init_app()
