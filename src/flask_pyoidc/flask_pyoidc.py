@@ -22,7 +22,7 @@ from urllib.parse import parse_qsl
 
 import flask
 import importlib_resources
-from flask import _app_ctx_stack, current_app
+from flask import current_app, g
 from flask.helpers import url_for
 from oic import rndstr
 from oic.extension.message import TokenIntrospectionResponse
@@ -66,7 +66,7 @@ class OIDCAuthentication:
         # is destroyed between the requests. The value is set by token_auth
         # decorator.
         self.current_token_identity = LocalProxy(lambda: getattr(
-            _app_ctx_stack.top, 'current_token_identity', None))
+            g, 'current_token_identity', None))
         self._redirect_uri_config = redirect_uri_config
 
         if app:
@@ -459,7 +459,7 @@ class OIDCAuthentication:
                     logger.info('Request has valid access token.')
                     # Store token introspection info within the application
                     # context.
-                    _app_ctx_stack.top.current_token_identity = token_introspection_result.to_dict()
+                    g.current_token_identity = token_introspection_result.to_dict()
                     return view_func(*args, **kwargs)
                 # Forbid access if the access token is invalid.
                 flask.abort(403)
