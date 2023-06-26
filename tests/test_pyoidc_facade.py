@@ -3,11 +3,15 @@ from urllib.parse import parse_qsl
 
 import pytest
 import responses
-from flask_pyoidc.provider_configuration import ProviderConfiguration, ClientMetadata, ProviderMetadata, \
-    ClientRegistrationInfo
-from flask_pyoidc.pyoidc_facade import PyoidcFacade
-from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse, AuthorizationResponse, Grant, OpenIDSchema,
+from oic.oic import (AccessTokenResponse, AuthorizationErrorResponse,
+                     AuthorizationResponse, Grant, OpenIDSchema,
                      TokenErrorResponse)
+
+from flask_pyoidc.provider_configuration import (ClientMetadata,
+                                                 ClientRegistrationInfo,
+                                                 ProviderConfiguration,
+                                                 ProviderMetadata)
+from flask_pyoidc.pyoidc_facade import PyoidcFacade
 
 from .util import signed_id_token
 
