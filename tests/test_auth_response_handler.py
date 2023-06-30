@@ -38,9 +38,9 @@ class TestAuthResponseHandler:
     def test_should_detect_state_mismatch(self, client_mock):
         auth_request = {'state': 'other_state', 'nonce': self.AUTH_REQUEST['nonce']}
         with pytest.raises(AuthResponseUnexpectedStateError):
-            AuthResponseHandler(client_mock).process_auth_response(self.AUTH_RESPONSE, auth_request)
+            AuthResponseHandler(client_mock).process_auth_response(self.AUTH_RESPONSE, auth_request, {})
 
-    def test_should_detect_nonce_mismatch(self, client_mock):
+    def test_should_detect_nonce_mismatch(self):
         client = PyoidcFacade(
             ProviderConfiguration(provider_metadata=ProviderMetadata(issuer=self.ISSUER),
                                   client_metadata=ClientMetadata(client_id=self.CLIENT_ID)),
@@ -48,19 +48,21 @@ class TestAuthResponseHandler:
         client.exchange_authorization_code = MagicMock(return_value=self.TOKEN_RESPONSE)
         auth_request = {'state': self.AUTH_RESPONSE['state'], 'nonce': 'other_nonce'}
         with pytest.raises(InvalidIdTokenError):
-            AuthResponseHandler(client).process_auth_response(self.AUTH_RESPONSE, auth_request)
+            AuthResponseHandler(client).process_auth_response(self.AUTH_RESPONSE, auth_request, {})
 
     def test_should_handle_auth_error_response(self, client_mock):
         with pytest.raises(AuthResponseErrorResponseError) as exc:
             AuthResponseHandler(client_mock).process_auth_response(AuthorizationErrorResponse(**self.ERROR_RESPONSE),
-                                                                   self.AUTH_REQUEST)
+                                                                   self.AUTH_REQUEST,
+                                                                   {})
         assert exc.value.error_response == self.ERROR_RESPONSE
 
     def test_should_handle_token_error_response(self, client_mock):
         client_mock.exchange_authorization_code.return_value = TokenErrorResponse(**self.ERROR_RESPONSE)
         with pytest.raises(AuthResponseErrorResponseError) as exc:
             AuthResponseHandler(client_mock).process_auth_response(AuthorizationResponse(**self.AUTH_RESPONSE),
-                                                                   self.AUTH_REQUEST)
+                                                                   self.AUTH_REQUEST,
+                                                                   {})
         assert exc.value.error_response == self.ERROR_RESPONSE
 
     def test_should_detect_mismatching_subject(self, client_mock):
@@ -68,13 +70,15 @@ class TestAuthResponseHandler:
         client_mock.userinfo_request.return_value = OpenIDSchema(**{'sub': 'other_sub'})
         with pytest.raises(AuthResponseMismatchingSubjectError):
             AuthResponseHandler(client_mock).process_auth_response(AuthorizationResponse(**self.AUTH_RESPONSE),
-                                                                   self.AUTH_REQUEST)
+                                                                   self.AUTH_REQUEST,
+                                                                   {})
 
     def test_should_handle_auth_response_with_authorization_code(self, client_mock):
         client_mock.exchange_authorization_code.return_value = self.TOKEN_RESPONSE
         client_mock.userinfo_request.return_value = self.USERINFO_RESPONSE
         result = AuthResponseHandler(client_mock).process_auth_response(self.AUTH_RESPONSE,
-                                                                        self.AUTH_REQUEST)
+                                                                        self.AUTH_REQUEST,
+                                                                        {})
         assert result.access_token == 'test_token'
         assert result.expires_in == self.TOKEN_RESPONSE['expires_in']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
@@ -86,20 +90,21 @@ class TestAuthResponseHandler:
         auth_response = AuthorizationResponse(**self.TOKEN_RESPONSE)
         auth_response['state'] = 'test_state'
         client_mock.userinfo_request.return_value = self.USERINFO_RESPONSE
-        result = AuthResponseHandler(client_mock).process_auth_response(auth_response, self.AUTH_REQUEST)
+        result = AuthResponseHandler(client_mock).process_auth_response(auth_response, self.AUTH_REQUEST, {})
         assert not client_mock.exchange_authorization_code.called
         assert result.access_token == 'test_token'
         assert result.expires_in == self.TOKEN_RESPONSE['expires_in']
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.userinfo_claims == self.USERINFO_RESPONSE.to_dict()
-        assert result.refresh_token == None
+        assert result.refresh_token is None
 
     def test_should_handle_token_response_without_id_token(self, client_mock):
         token_response = {'access_token': 'test_token'}
         client_mock.exchange_authorization_code.return_value = AccessTokenResponse(**token_response)
         result = AuthResponseHandler(client_mock).process_auth_response(AuthorizationResponse(**self.AUTH_RESPONSE),
-                                                                        self.AUTH_REQUEST)
+                                                                        self.AUTH_REQUEST,
+                                                                        {})
         assert result.access_token == 'test_token'
         assert result.id_token_claims is None
 
@@ -109,7 +114,8 @@ class TestAuthResponseHandler:
         hybrid_auth_response = self.AUTH_RESPONSE.copy()
         hybrid_auth_response.update(self.TOKEN_RESPONSE)
         result = AuthResponseHandler(client_mock).process_auth_response(AuthorizationResponse(**hybrid_auth_response),
-                                                                        self.AUTH_REQUEST)
+                                                                        self.AUTH_REQUEST,
+                                                                        {})
         assert result.access_token == 'test_token'
         assert result.id_token_claims == self.TOKEN_RESPONSE['id_token'].to_dict()
         assert result.id_token_jwt == self.TOKEN_RESPONSE['id_token_jwt']

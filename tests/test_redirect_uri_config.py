@@ -2,7 +2,7 @@ import pytest
 from flask_pyoidc.redirect_uri_config import RedirectUriConfig
 
 
-class TestRedirectUriConfig(object):
+class TestRedirectUriConfig:
     LEGACY_CONFIG = {'SERVER_NAME': 'example.com', 'PREFERRED_URL_SCHEME': 'http'}
 
     def test_legacy_config_defaults(self):

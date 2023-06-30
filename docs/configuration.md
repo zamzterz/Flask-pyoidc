@@ -122,6 +122,7 @@ This extension also uses the following configuration parameters:
   session lifetime (see below). If set to `False` the session will be deleted when the user closes the browser.
 * `PERMANENT_SESSION_LIFETIME`: Control how long a user session is valid, see
   [Flask documentation](https://flask.palletsprojects.com/en/2.0.x/config/#PERMANENT_SESSION_LIFETIME) for more information.
+* `OIDC_CLOCK_SKEW`: Number of seconds of clock skew allowed when checking the “don’t use before” and “don’t use after” values for tokens.
 
 ### Legacy configuration parameters
 The following parameters have been deprecated:

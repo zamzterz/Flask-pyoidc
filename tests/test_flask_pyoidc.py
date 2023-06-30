@@ -1,25 +1,24 @@
 import json
 import logging
+import time
+from datetime import datetime
+from http.cookies import SimpleCookie
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qsl, urlparse, urlencode
 
 import flask
 import pytest
 import responses
-import time
-from datetime import datetime
 from flask import Flask
-from flask_pyoidc.redirect_uri_config import RedirectUriConfig
-from http.cookies import SimpleCookie
-from jwkest import jws
-from oic.oic import AuthorizationResponse
-from oic.oic.message import IdToken
-from unittest.mock import MagicMock, patch
-from urllib.parse import parse_qsl, urlparse, urlencode
-from werkzeug.exceptions import Forbidden, Unauthorized
-
 from flask_pyoidc import OIDCAuthentication
 from flask_pyoidc.provider_configuration import (ProviderConfiguration, ProviderMetadata, ClientMetadata,
                                                  ClientRegistrationInfo)
+from flask_pyoidc.redirect_uri_config import RedirectUriConfig
 from flask_pyoidc.user_session import UserSession
+from jwkest import jws
+from oic.oic import AuthorizationResponse
+from oic.oic.message import IdToken
+from werkzeug.exceptions import Forbidden, Unauthorized
 from werkzeug.routing import BuildError
 
 from .util import signed_id_token
@@ -35,7 +34,7 @@ class TestOIDCAuthentication:
     @pytest.fixture(autouse=True)
     def create_flask_app(self):
         self.app = Flask(__name__)
-        self.app.config.update({'SERVER_NAME': self.CLIENT_DOMAIN, 'SECRET_KEY': 'test_key'})
+        self.app.config.update({'SERVER_NAME': self.CLIENT_DOMAIN, 'SECRET_KEY': 'test_key', 'OIDC_CLOCK_SKEW': 10})
 
     def init_app(self, provider_metadata_extras=None, client_metadata_extras=None, **kwargs):
         required_provider_metadata = {
@@ -302,7 +301,7 @@ class TestOIDCAuthentication:
         authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint,
                                                         'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
-        with self.app.test_request_context('/redirect_uri?state={}&code=test'.format(state)):
+        with self.app.test_request_context(f'/redirect_uri?state={state}&code=test'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['destination'] = '/'
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
@@ -348,7 +347,7 @@ class TestOIDCAuthentication:
         userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
         responses.add(responses.GET, userinfo_endpoint, json=userinfo)
 
-        authn = self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
+        self.init_app(provider_metadata_extras={'userinfo_endpoint': userinfo_endpoint})
         state = 'test_state'
         auth_response = AuthorizationResponse(
             **{'state': state, 'access_token': access_token, 'token_type': 'Bearer', 'id_token': id_token_jwt})
@@ -359,7 +358,7 @@ class TestOIDCAuthentication:
                 session['destination'] = '/'
                 session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
                 session['fragment_encoded_response'] = True
-            client.get('/redirect_uri#{}'.format(auth_response.to_urlencoded()))
+            client.get(f'/redirect_uri#{auth_response.to_urlencoded()}')
             assert 'auth_request' in session  # stored auth_request should not have been removed yet
 
             # fake the POST request from the 'parse_fragment.html' template
@@ -419,7 +418,8 @@ class TestOIDCAuthentication:
             authn.error_view(error_view_mock)
             result = authn._handle_authentication_response()
             self.assert_view_mock(error_view_mock, result)
-            error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
+            error_view_mock.assert_called_with(
+                **{'error': 'unsolicited_response', 'error_description': 'No initialised user session.'})
 
     def test_handle_authentication_response_without_stored_auth_request(self):
         authn = self.init_app()
@@ -435,7 +435,8 @@ class TestOIDCAuthentication:
             authn.error_view(error_view_mock)
             result = authn._handle_authentication_response()
             self.assert_view_mock(error_view_mock, result)
-            error_view_mock.assert_called_with(**{'error': 'unsolicited_response', 'error_description': 'No authentication request stored.'})
+            error_view_mock.assert_called_with(
+                **{'error': 'unsolicited_response', 'error_description': 'No authentication request stored.'})
 
     def test_handle_authentication_response_fragment_encoded(self):
         authn = self.init_app()
@@ -489,7 +490,7 @@ class TestOIDCAuthentication:
                 UserSession(session, self.PROVIDER_NAME)
                 session['destination'] = '/'
                 session['auth_request'] = json.dumps({'state': state, 'nonce': nonce, 'response_type': 'code'})
-            resp = client.get('/redirect_uri?state={}&code=test'.format(state))
+            resp = client.get(f'/redirect_uri?state={state}&code=test')
 
         cookies = SimpleCookie()
         cookies.load(resp.headers['Set-Cookie'])
@@ -526,7 +527,7 @@ class TestOIDCAuthentication:
         assert end_session_redirect.location.startswith(end_session_endpoint)
         assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
 
-        assert parsed_request['post_logout_redirect_uri'] == 'http://{}/logout'.format(self.CLIENT_DOMAIN)
+        assert parsed_request['post_logout_redirect_uri'] == f'http://{self.CLIENT_DOMAIN}/logout'
         assert not logout_view_mock.called
 
     @responses.activate
@@ -632,7 +633,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         logout_view_mock = self.get_view_mock()
         state = 'end_session_123'
-        with self.app.test_request_context('/logout?state={}'.format(state)):
+        with self.app.test_request_context(f'/logout?state={state}'):
             flask.session['end_session_state'] = state
             result = authn.oidc_logout(logout_view_mock)()
             assert 'end_session_state' not in flask.session
@@ -643,7 +644,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         logout_view_mock = self.get_view_mock()
         state = 'some_state'
-        with self.app.test_request_context('/logout?state={}'.format(state)):
+        with self.app.test_request_context(f'/logout?state={state}'):
             flask.session['end_session_state'] = 'other_state'
             result = authn.oidc_logout(logout_view_mock)()
             assert 'end_session_state' not in flask.session
@@ -651,7 +652,7 @@ class TestOIDCAuthentication:
         self.assert_view_mock(logout_view_mock, result)
         assert caplog.record_tuples[-1] == ('flask_pyoidc.flask_pyoidc',
                                             logging.ERROR,
-                                            "Got unexpected state '{}' after logout redirect.".format(state))
+                                            f"Got unexpected state '{state}' after logout redirect.")
 
     def test_logout_handles_no_user_session(self):
         authn = self.init_app()
@@ -667,8 +668,7 @@ class TestOIDCAuthentication:
         authn = self.init_app()
         error_view_mock = self.get_view_mock()
         authn.error_view(error_view_mock)
-        with self.app.test_request_context('/redirect_uri?{error}&state={state}'.format(error=urlencode(error_response),
-                                                                                        state=state)):
+        with self.app.test_request_context(f'/redirect_uri?{urlencode(error_response)}&state={state}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': 'test_nonce'})
             result = authn._handle_authentication_response()
@@ -679,9 +679,12 @@ class TestOIDCAuthentication:
     def test_authentication_error_response_returns_default_error_if_no_error_view_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error', 'state': state}
-        authn = self.init_app(dict(provider_configuration_info={'issuer': self.PROVIDER_BASEURL},
-                                   client_registration_info=dict(client_id='abc', client_secret='foo')))
-        with self.app.test_request_context('/redirect_uri?{}'.format(urlencode(error_response))):
+        config = {
+            'provider_configuration_info': {'issuer': self.PROVIDER_BASEURL},
+            'client_registration_info': {'client_id': 'abc', 'client_secret': 'foo'}
+        }
+        authn = self.init_app(config)
+        with self.app.test_request_context(f'/redirect_uri?{urlencode(error_response)}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['state'] = state
             flask.session['nonce'] = 'test_nonce'
@@ -698,7 +701,7 @@ class TestOIDCAuthentication:
         error_view_mock = self.get_view_mock()
         authn.error_view(error_view_mock)
         state = 'test_tate'
-        with self.app.test_request_context('/redirect_uri?code=foo&state={}'.format(state)):
+        with self.app.test_request_context(f'/redirect_uri?code=foo&state={state}'):
             UserSession(flask.session, self.PROVIDER_NAME)
             flask.session['auth_request'] = json.dumps({'state': state, 'nonce': 'test_nonce'})
             result = authn._handle_authentication_response()
@@ -941,7 +944,7 @@ class TestOIDCAuthentication:
             authn.token_auth(self.PROVIDER_NAME,
                              scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+            assert flask.g.current_token_identity == token_introspection_response
 
     @responses.activate
     def test_token_auth_should_raise_forbidden_if_invalid_token(self):
@@ -1028,7 +1031,7 @@ class TestOIDCAuthentication:
                 self.PROVIDER_NAME,
                 scopes_required=['read', 'write'])(view_mock)()
             assert view_mock.called
-            assert flask._app_ctx_stack.top.current_token_identity == token_introspection_response
+            assert flask.g.current_token_identity == token_introspection_response
 
     def test_get_url_for_logout_view_should_raise_build_error_if_mounted_under_custom_endpoint(self):
         authn = self.init_app()
@@ -1038,3 +1041,61 @@ class TestOIDCAuthentication:
         with self.app.test_request_context('/'):
             with pytest.raises(BuildError):
                 authn._get_urls_for_logout_views()
+
+    @patch('time.time')
+    @patch('oic.utils.time_util.utc_time_sans_frac')  # used internally by pyoidc when verifying ID Token
+    @responses.activate
+    def test_oidc_clock_skew_passed(self, time_mock, utc_time_sans_frac_mock):
+        # freeze time since ID Token validation includes expiration timestamps
+        timestamp = time.mktime(datetime(2017, 1, 1).timetuple())
+        time_mock.return_value = timestamp
+        utc_time_sans_frac_mock.return_value = int(timestamp)
+
+        # mock token response
+        user_id = 'user1'
+        skew = 10
+        exp_time = 10
+        nonce = 'test_nonce'
+        id_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'aud': [self.CLIENT_ID],
+            'sub': user_id,
+            'exp': int(timestamp) + exp_time + skew,
+            'iat': int(timestamp) + skew,
+            'nonce': nonce
+        }
+
+        id_token_jwt, id_token_signing_key = signed_id_token(id_token_claims)
+        access_token = 'test_access_token'
+        expires_in = 3600
+        token_response = {
+            'access_token': access_token,
+            'expires_in': expires_in,
+            'token_type': 'Bearer',
+            'id_token': id_token_jwt
+        }
+        token_endpoint = self.PROVIDER_BASEURL + '/token'
+        responses.add(responses.POST, token_endpoint, json=token_response)
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/jwks',
+                      json={'keys': [id_token_signing_key.serialize()]})
+
+        # mock userinfo response
+        userinfo = {'sub': user_id, 'name': 'Test User'}
+        userinfo_endpoint = self.PROVIDER_BASEURL + '/userinfo'
+        responses.add(responses.GET, userinfo_endpoint, json=userinfo)
+
+        authn = self.init_app(provider_metadata_extras={'token_endpoint': token_endpoint,
+                                                        'userinfo_endpoint': userinfo_endpoint})
+        state = 'test_state'
+        with self.app.test_request_context('/redirect_uri?state={}&code=test'.format(state)):
+            UserSession(flask.session, self.PROVIDER_NAME)
+            flask.session['destination'] = '/'
+            flask.session['auth_request'] = json.dumps({'state': state, 'nonce': nonce})
+            authn._handle_authentication_response()
+            session = UserSession(flask.session)
+            assert session.access_token == access_token
+            assert session.access_token_expires_at == int(timestamp) + expires_in
+            assert session.id_token == id_token_claims
+            assert session.id_token_jwt == id_token_jwt
+            assert session.userinfo == userinfo
