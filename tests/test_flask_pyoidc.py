@@ -523,7 +523,7 @@ class TestOIDCAuthentication:
             parsed_request = dict(parse_qsl(urlparse(end_session_redirect.headers['Location']).query))
             assert parsed_request['state'] == flask.session['end_session_state']
 
-        assert end_session_redirect.status_code == 303
+        assert end_session_redirect.status_code == 307
         assert end_session_redirect.location.startswith(end_session_endpoint)
         assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
 
@@ -587,7 +587,7 @@ class TestOIDCAuthentication:
                 parsed_request = dict(parse_qsl(urlparse(end_session_redirect.headers['Location']).query))
                 assert parsed_request['state'] == flask.session['end_session_state']
 
-            assert end_session_redirect.status_code == 303
+            assert end_session_redirect.status_code == 307
             assert end_session_redirect.location.startswith(end_session_endpoint)
             assert IdToken().from_jwt(parsed_request['id_token_hint']) == id_token
 

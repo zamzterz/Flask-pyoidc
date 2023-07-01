@@ -12,7 +12,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
+import http
 import functools
 import json
 import logging
@@ -27,7 +27,7 @@ from flask.helpers import url_for
 from oic import rndstr
 from oic.extension.message import TokenIntrospectionResponse
 from oic.oic import AuthorizationRequest
-from oic.oic.message import EndSessionRequest
+from oic.oic.message import FrontChannelLogoutRequest
 from werkzeug.exceptions import Forbidden, Unauthorized
 from werkzeug.local import LocalProxy
 from werkzeug.routing import BuildError
@@ -251,13 +251,14 @@ class OIDCAuthentication:
         if client.provider_end_session_endpoint:
             flask.session['end_session_state'] = rndstr()
 
-            end_session_request = EndSessionRequest(id_token_hint=id_token_jwt,
-                                                    post_logout_redirect_uri=post_logout_redirect_uri,
-                                                    state=flask.session['end_session_state'])
+            end_session_request = FrontChannelLogoutRequest(id_token_hint=id_token_jwt,
+                                                            post_logout_redirect_uri=post_logout_redirect_uri,
+                                                            state=flask.session['end_session_state'])
 
-            logger.debug('send endsession request: %s', end_session_request.to_json())
+            logger.debug('send end session request: %s', end_session_request.to_json())
 
-            return redirect(end_session_request.request(client.provider_end_session_endpoint), 303)
+            return redirect(end_session_request.request(client.provider_end_session_endpoint),
+                            http.HTTPStatus.TEMPORARY_REDIRECT)
         return None
 
     def oidc_logout(self, view_func):
