@@ -344,7 +344,7 @@ class OIDCAuthentication:
             _, access_token = flask.request.headers['Authorization'].split(maxsplit=1)
             return access_token
 
-    def introspect_token(self, client: PyoidcFacade, scopes: List[str] = None, request=None
+    def introspect_token(self, client: PyoidcFacade, scopes: List[str] = None, audience: bool = False, request=None
                          ) -> Optional["TokenIntrospectionResponse"]:
         """Make token introspection request.
 
@@ -356,6 +356,8 @@ class OIDCAuthentication:
             PyoidcFacade object contains metadata of the provider and client.
         scopes : list, optional
             Specify scopes required by your endpoint.
+        audience: bool
+            If set to True, 'aud' claim wil be checked for the presence of 'client_id'.
 
         Returns
         -------
@@ -372,10 +374,11 @@ class OIDCAuthentication:
             logger.info('Request header has no authorization field')
             return None
         token_introspection_response = client._introspect_token(access_token=access_token)
-        if client._validate_token_response(token=token_introspection_response, scopes=scopes):
+        if client._validate_token_response(token=token_introspection_response, scopes=scopes, audience=audience):
             return token_introspection_response
 
-    def token_auth(self, provider_name, scopes_required: List[str] = None, introspection: bool = False):
+    def token_auth(self, provider_name, scopes_required: List[str] = None, audience: bool = False,
+                   introspection: bool = False):
         """Token based authorization.
 
         Parameters
@@ -384,6 +387,8 @@ class OIDCAuthentication:
             Name of the provider registered with OIDCAuthorization.
         scopes_required : list, optional
             List of valid scopes associated with the endpoint.
+        audience: bool
+            If set to True, 'aud' claim wil be checked for the presence of 'client_id'.
         introspection : bool, optional
             If you are using opaque tokens, set this to True to verify them
             using token introspection protocol.
@@ -416,6 +421,13 @@ class OIDCAuthentication:
         ::
 
             @auth.token_auth(provider_name='default', scopes_required=['read', 'write'], introspection=True)
+
+        To enforce 'aud' claim, set audience to True.
+
+        ::
+
+            @auth.access_control(provider_name='default', scopes_required=['read', 'write'], audience=True,
+                                 introspection=True)
         """
         client = self.clients[provider_name]
         verify = functools.partial(self._access_token_response.from_jwt, keyjar=client._client.keyjar) \
@@ -433,7 +445,7 @@ class OIDCAuthentication:
                     # Abort the request if authorization field is missing.
                     flask.abort(http.HTTPStatus.UNAUTHORIZED)
                 result: Union[AccessTokenResponse, "TokenIntrospectionResponse"] = verify(access_token)
-                if client._validate_token_response(token=result, scopes=scopes_required):
+                if client._validate_token_response(token=result, scopes=scopes_required, audience=audience):
                     logger.info('Request has valid access token.')
                     # Store token introspection info within the application
                     # context.
@@ -446,7 +458,8 @@ class OIDCAuthentication:
 
         return token_decorator
 
-    def access_control(self, provider_name: str, scopes_required: List[str] = None, introspection: bool = False):
+    def access_control(self, provider_name: str, scopes_required: List[str] = None, audience: bool = False,
+                       introspection: bool = False):
         """This decorator serves dual purpose that is it can do both token
         based authorization and oidc based authentication. If your API needs
         to be accessible by either modes, use this decorator otherwise use
@@ -458,6 +471,8 @@ class OIDCAuthentication:
             Name of the provider registered with OIDCAuthorization.
         scopes_required : list, optional
             List of valid scopes associated with the endpoint.
+        audience: bool
+            If set to True, 'aud' claim wil be checked for the presence of 'client_id'.
         introspection : bool, optional
             If you are using opaque tokens, set this to True to verify them
             using token introspection protocol.
@@ -488,6 +503,13 @@ class OIDCAuthentication:
         ::
 
             @auth.access_control(provider_name='default', scopes_required=['read', 'write'], introspection=True)
+
+        To enforce 'aud' claim, set audience to True.
+
+        ::
+
+            @auth.access_control(provider_name='default', scopes_required=['read', 'write'], audience=True,
+                                 introspection=True)
         """
         def hybrid_decorator(view_func):
 
@@ -500,7 +522,8 @@ class OIDCAuthentication:
                     # If the request header contains authorization, token_auth
                     # verifies the access_token otherwise an exception occurs
                     # and the request falls back to oidc_auth.
-                    return self.token_auth(provider_name, scopes_required, introspection)(view_func)(*args, **kwargs)
+                    return self.token_auth(provider_name, scopes_required, audience, introspection)(view_func)(
+                        *args, **kwargs)
                 # token_auth will raise the HTTPException if either
                 # authorization field is missing from the request header or
                 # token is invalid. If the authorization field is missing,

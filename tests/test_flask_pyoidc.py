@@ -900,28 +900,27 @@ class TestOIDCAuthentication:
             assert flask.g.current_token_identity == token_introspection_response if introspection else \
                 access_token_claims
 
+    @pytest.mark.parametrize('exp, aud, scope, audience', [
+        (int(time.time()) - 1, ['admin', CLIENT_ID], 'read write', False),
+        (int(time.time()) + 60, ['admin'], 'read write', True),
+        (int(time.time()) + 60, ['admin', CLIENT_ID], 'read', False)])
     @responses.activate
-    def test_token_auth_should_raise_forbidden_if_invalid_token(self):
-
-        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
-        authn = self.init_app(provider_metadata_extras={
-            'introspection_endpoint': introspection_endpoint})
+    def test_token_auth_should_raise_forbidden_if_invalid_token(self, exp, aud, scope, audience):
+        authn = self.init_app()
         view_mock = self.get_view_mock()
-        introspection_endpoint = f'{self.PROVIDER_BASEURL}/token/introspect'
-        token_introspection_response = {
-            'active': False,
-            'aud': ['admin', 'user', self.CLIENT_ID],
-            'scope': 'read write delete',
-            'client_id': self.CLIENT_ID
+        access_token_claims = {
+            'iss': self.PROVIDER_BASEURL,
+            'exp': exp,
+            'aud': aud,
+            'scope': scope
         }
-        responses.add(responses.POST, introspection_endpoint,
-                      json=token_introspection_response)
+        responses.add(responses.GET, f'{self.PROVIDER_BASEURL}/jwks', json={"keys": [signing_key.serialize()]})
         with self.app.test_request_context('/'):
             flask.request.headers = {
-                'Authorization': 'Bearer access_token'
+                'Authorization': f"Bearer {signed_access_token(claims=access_token_claims)}"
             }
             with pytest.raises(Forbidden):
-                authn.token_auth(self.PROVIDER_NAME, scopes_required=['read', 'write'], introspection=True)(view_mock)()
+                authn.token_auth(self.PROVIDER_NAME, scopes_required=['read', 'write'], audience=audience)(view_mock)()
 
     @responses.activate
     def test_access_control_should_fallback_to_oidc_auth_on_401(self):

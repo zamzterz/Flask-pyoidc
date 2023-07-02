@@ -59,8 +59,8 @@ class PyoidcFacade:
         self._oauth2_client.client_id = registration_response['client_id']
         self._oauth2_client.client_secret = registration_response['client_secret']
 
-    def _validate_token_response(self, token: Union[AccessTokenResponse, TokenIntrospectionResponse], scopes: List[str]
-                                 ) -> bool:
+    def _validate_token_response(self, token: Union[AccessTokenResponse, TokenIntrospectionResponse], scopes: List[str],
+                                 audience: bool) -> bool:
         """Validates expiry, audience and scopes.
 
         Parameters
@@ -68,6 +68,8 @@ class PyoidcFacade:
         token : Union[AccessTokenResponse, TokenIntrospectionResponse]
         scopes : List[str]
             OIDC scopes required by the endpoint.
+        audience: bool
+            If set to True, 'aud' claim wil be checked for the presence of 'client_id'.
 
         Returns
         -------
@@ -80,7 +82,7 @@ class PyoidcFacade:
         elif isinstance(token, TokenIntrospectionResponse) and not token['active']:
             return False
         # Check if client_id is in audience claim.
-        if self._client.client_id not in token['aud']:
+        if audience and self._client.client_id not in token.get('aud', ()):
             logger.info('Token is valid but required audience is missing.')
             return False
         # Check if the scopes associated with the access token are permitted.
