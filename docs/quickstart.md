@@ -76,22 +76,20 @@ To add token-based authorization to your endpoints use the `token_auth`
 decorator. It authorizes requests to your endpoint with Bearer tokens in
 the `Authorization` header.
 
-The token-based authorization is backed by
-[token introspection](https://datatracker.ietf.org/doc/html/rfc7662)
-so make sure the Identity Provider's introspection endpoint is configured.
-```python
-provider_metadata = ProviderMetadata(
-    ...,
-    introspection_endpoint='https://idp.example.com/introspect',
-    ...)
+### JWT Tokens
+To verify JWT tokens, decorate your endpoint with `token_auth` decorator.
 
+```python
 @app.route('/api')
 @auth.token_auth('default')
 def api():
     current_token_identity = auth.current_token_identity
     ...
+```
 
-# Optionally, you can specify scopes required by your endpoint.
+You can also specify scopes required by your endpoint.
+
+```python
 @app.route('/api')
 @auth.token_auth('default',
                  scopes_required=['read', 'write'])
@@ -99,6 +97,26 @@ def api():
     current_token_identity = auth.current_token_identity
     ...
 ```
+
+### Opaque Tokens
+Opaque tokens can only be verified by the provider using
+[token introspection](https://datatracker.ietf.org/doc/html/rfc7662) protocol.
+To enable token introspection on your endpoint, set `introspection` to `True`, `False` by default.
+You must also configure the Identity Provider's introspection endpoint.
+
+```python
+provider_metadata = ProviderMetadata(
+    ...,
+    introspection_endpoint='https://idp.example.com/introspect',
+    ...)
+
+@app.route('/api')
+@auth.token_auth('default', introspection=True)
+def api():
+    current_token_identity = auth.current_token_identity
+    ...
+```
+
 To obtain information about the token, use `auth.current_token_identity` inside
 your view function. `current_token_identity` persists for current request only.
 
@@ -106,7 +124,7 @@ your view function. `current_token_identity` persists for current request only.
 
 If you want to apply both OIDC-based authentication and token-based
 authorization on your endpoint, you can use `access_control` decorator.
-Then the request will first be checked for a valid access token (in the `Authorization` header).
+The request will be first checked for a valid access token (in the `Authorization` header).
 If there is no token in the request it will fall back to the OIDC-based authentication mechanism.
 
 If there is a token in the request but it's invalid (e.g. expired, or missing required scopes) the request will
@@ -114,17 +132,22 @@ be rejected with a `403 Forbidden` response.
 
 
 ```python
-# If you are using Static Provider Configuration, add introspection_endpoint
-# in ProviderMetadata.
-provider_metadata = ProviderMetadata(
-    ...,
-    introspection_endpoint='https://idp.example.com/introspect',
-    ...)
-
 @app.route('/api')
 @auth.access_control('default')
 def api():
-    current_identity = None
+    if auth.current_token_identity:
+        current_identity = auth.current_token_identity
+    else:
+        current_identity = UserSession(flask.session)
+    ...
+```
+
+You can also set required scopes and whether to enable token introspection.
+
+```python
+@auth.access_control(provider_name='default', scopes_required=['read', 'write'],
+                     introspection=True)
+def api():
     if auth.current_token_identity:
         current_identity = auth.current_token_identity
     else:

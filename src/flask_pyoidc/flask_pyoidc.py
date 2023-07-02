@@ -12,12 +12,13 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-
+import http
 import functools
 import json
 import logging
 import time
-from typing import Optional
+import warnings
+from typing import TYPE_CHECKING, List, Optional, Union
 from urllib.parse import parse_qsl
 
 import flask
@@ -25,8 +26,7 @@ import importlib_resources
 from flask import current_app, g
 from flask.helpers import url_for
 from oic import rndstr
-from oic.extension.message import TokenIntrospectionResponse
-from oic.oic import AuthorizationRequest
+from oic.oic import AccessTokenResponse, AuthorizationRequest
 from oic.oic.message import EndSessionRequest
 from werkzeug.exceptions import Forbidden, Unauthorized
 from werkzeug.local import LocalProxy
@@ -37,6 +37,9 @@ from .auth_response_handler import AuthResponseProcessError, AuthResponseHandler
 from .pyoidc_facade import PyoidcFacade
 from .redirect_uri_config import RedirectUriConfig
 from .user_session import UninitialisedSession, UserSession
+
+if TYPE_CHECKING:
+    from oic.extension.message import TokenIntrospectionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,7 @@ class OIDCAuthentication:
         self.current_token_identity = LocalProxy(lambda: getattr(
             g, 'current_token_identity', None))
         self._redirect_uri_config = redirect_uri_config
+        self._access_token_response = AccessTokenResponse()
 
         if app:
             self.init_app(app)
@@ -328,54 +332,27 @@ class OIDCAuthentication:
         return access_token
 
     @staticmethod
-    def _check_authorization_header(request) -> bool:
-        """Look for authorization in request header.
-
-        Parameters
-        ----------
-        request : flask.Request
-            flask request object.
+    def _parse_authorization_header() -> str:
+        """Checks for the authorization field in the request header and obtains the access token.
 
         Returns
         -------
-        bool
-            True if the request header contains authorization else False.
+        access_token : str
+            Access token from the request header.
         """
-        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
-            return True
-        return False
+        if 'Authorization' in flask.request.headers and flask.request.headers['Authorization'].startswith('Bearer '):
+            _, access_token = flask.request.headers['Authorization'].split(maxsplit=1)
+            return access_token
 
-    @staticmethod
-    def _parse_access_token(request) -> str:
-        """Parse access token from the authorization request header.
+    def introspect_token(self, client: PyoidcFacade, scopes: List[str] = None, request=None
+                         ) -> Optional["TokenIntrospectionResponse"]:
+        """Make token introspection request.
 
         Parameters
         ----------
         request : flask.Request
             flask request object.
-
-        Returns
-        -------
-        accept_token : str
-            access token from the request header.
-        """
-        _, access_token = request.headers['Authorization'].split(maxsplit=1)
-        return access_token
-
-    def introspect_token(self, request, client, scopes: list = None) ->\
-            Optional[TokenIntrospectionResponse]:
-        """RFC 7662: Token Introspection
-        The Token Introspection extension defines a mechanism for resource
-        servers to obtain information about access tokens. With this spec,
-        resource servers can check the validity of access tokens, and find out
-        other information such as which user and which scopes are associated
-        with the token.
-
-        Parameters
-        ----------
-        request : flask.Request
-            flask request object.
-        client : flask_pyoidc.pyoidc_facade.PyoidcFacade
+        client : PyoidcFacade
             PyoidcFacade object contains metadata of the provider and client.
         scopes : list, optional
             Specify scopes required by your endpoint.
@@ -385,29 +362,20 @@ class OIDCAuthentication:
         result: TokenIntrospectionResponse or None
             If access_token is valid or None if invalid.
         """
-        received_access_token = self._parse_access_token(request)
-        # send token introspection request
-        result = client._token_introspection_request(
-            access_token=received_access_token)
-        logger.debug(result)
-        # Check if access_token is valid, active can be True or False
-        if not result.get('active'):
+        warnings.warn("Method 'OIDCAuthentication.introspect_token' will be deprecated in future. This functionality "
+                      "has been merged in 'OIDCAuthentication.token_auth'.", PendingDeprecationWarning, stacklevel=2)
+        if request:
+            warnings.warn("'request' argument will be deprecated in future. This method now access request context "
+                          "using 'flask.request'.", PendingDeprecationWarning, stacklevel=2)
+        access_token = self._parse_authorization_header()
+        if not access_token:
+            logger.info('Request header has no authorization field')
             return None
-        # Check if client_id is in audience claim
-        if client._client.client_id not in result['aud']:
-            # log the exception if client_id is not in audience and returns
-            # False, you can configure audience with Identity Provider
-            logger.info('Token is valid but required audience is missing.')
-            return None
-        # Check if the scopes associated with the access_token are the ones
-        # required by the endpoint and not something else which is not
-        # permitted.
-        if scopes and not set(scopes).issubset(set(result['scope'])):
-            logger.info('Token is valid but does not have required scopes.')
-            return None
-        return result
+        token_introspection_response = client._introspect_token(access_token=access_token)
+        if client._validate_token_response(token=token_introspection_response, scopes=scopes):
+            return token_introspection_response
 
-    def token_auth(self, provider_name, scopes_required: list = None):
+    def token_auth(self, provider_name, scopes_required: List[str] = None, introspection: bool = False):
         """Token based authorization.
 
         Parameters
@@ -416,6 +384,9 @@ class OIDCAuthentication:
             Name of the provider registered with OIDCAuthorization.
         scopes_required : list, optional
             List of valid scopes associated with the endpoint.
+        introspection : bool, optional
+            If you are using opaque tokens, set this to True to verify them
+            using token introspection protocol.
 
         Raises
         ------
@@ -438,38 +409,44 @@ class OIDCAuthentication:
 
         ::
 
-            @auth.token_auth(provider_name='default',
-                             scopes_required=['read', 'write'])
+            @auth.token_auth(provider_name='default', scopes_required=['read', 'write'])
+
+        If you are using opaque tokens, use token introspection protocol to verify them.
+
+        ::
+
+            @auth.token_auth(provider_name='default', scopes_required=['read', 'write'], introspection=True)
         """
+        client = self.clients[provider_name]
+        verify = functools.partial(self._access_token_response.from_jwt, keyjar=client._client.keyjar) \
+            if not introspection else functools.partial(client._introspect_token)
+
         def token_decorator(view_func):
 
             @functools.wraps(view_func)
             def wrapper(*args, **kwargs):
 
-                client = self.clients[provider_name]
                 # Check for authorization field in the request header.
-                if not self._check_authorization_header(flask.request):
-                    logger.info('Request header has no authorization field')
+                access_token = self._parse_authorization_header()
+                if not access_token:
+                    logger.info('Request header has no authorization field.')
                     # Abort the request if authorization field is missing.
-                    flask.abort(401)
-                token_introspection_result = self.introspect_token(
-                    request=flask.request, client=client,
-                    scopes=scopes_required)
-                if token_introspection_result:
+                    flask.abort(http.HTTPStatus.UNAUTHORIZED)
+                result: Union[AccessTokenResponse, "TokenIntrospectionResponse"] = verify(access_token)
+                if client._validate_token_response(token=result, scopes=scopes_required):
                     logger.info('Request has valid access token.')
                     # Store token introspection info within the application
                     # context.
-                    g.current_token_identity = token_introspection_result.to_dict()
+                    g.current_token_identity = result.to_dict()
                     return view_func(*args, **kwargs)
                 # Forbid access if the access token is invalid.
-                flask.abort(403)
+                flask.abort(http.HTTPStatus.FORBIDDEN)
 
             return wrapper
 
         return token_decorator
 
-    def access_control(self, provider_name: str,
-                       scopes_required: list = None):
+    def access_control(self, provider_name: str, scopes_required: List[str] = None, introspection: bool = False):
         """This decorator serves dual purpose that is it can do both token
         based authorization and oidc based authentication. If your API needs
         to be accessible by either modes, use this decorator otherwise use
@@ -481,6 +458,9 @@ class OIDCAuthentication:
             Name of the provider registered with OIDCAuthorization.
         scopes_required : list, optional
             List of valid scopes associated with the endpoint.
+        introspection : bool, optional
+            If you are using opaque tokens, set this to True to verify them
+            using token introspection protocol.
 
         Raises
         ------
@@ -501,8 +481,13 @@ class OIDCAuthentication:
 
         ::
 
-            @auth.access_control(provider_name='default',
-                                 scopes_required=['read', 'write'])
+            @auth.access_control(provider_name='default', scopes_required=['read', 'write'])
+
+        If you are using opaque tokens, use token introspection protocol to verify them.
+
+        ::
+
+            @auth.access_control(provider_name='default', scopes_required=['read', 'write'], introspection=True)
         """
         def hybrid_decorator(view_func):
 
@@ -515,8 +500,7 @@ class OIDCAuthentication:
                     # If the request header contains authorization, token_auth
                     # verifies the access_token otherwise an exception occurs
                     # and the request falls back to oidc_auth.
-                    return self.token_auth(provider_name, scopes_required)(
-                        view_func)(*args, **kwargs)
+                    return self.token_auth(provider_name, scopes_required, introspection)(view_func)(*args, **kwargs)
                 # token_auth will raise the HTTPException if either
                 # authorization field is missing from the request header or
                 # token is invalid. If the authorization field is missing,

@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Mapping
+import time
+from typing import Any, List, Mapping, Optional, Union
 
 from oic.extension.client import Client as ClientExtension
 from oic.extension.message import TokenIntrospectionResponse
@@ -57,6 +58,36 @@ class PyoidcFacade:
         # by Client Credentials Flow.
         self._oauth2_client.client_id = registration_response['client_id']
         self._oauth2_client.client_secret = registration_response['client_secret']
+
+    def _validate_token_response(self, token: Union[AccessTokenResponse, TokenIntrospectionResponse], scopes: List[str]
+                                 ) -> bool:
+        """Validates expiry, audience and scopes.
+
+        Parameters
+        ----------
+        token : Union[AccessTokenResponse, TokenIntrospectionResponse]
+        scopes : List[str]
+            OIDC scopes required by the endpoint.
+
+        Returns
+        -------
+        bool
+            True if the access token is valid or False if invalid.
+        """
+        # Check if the access token is valid or active.
+        if isinstance(token, AccessTokenResponse) and token['exp'] <= time.time():
+            return False
+        elif isinstance(token, TokenIntrospectionResponse) and not token['active']:
+            return False
+        # Check if client_id is in audience claim.
+        if self._client.client_id not in token['aud']:
+            logger.info('Token is valid but required audience is missing.')
+            return False
+        # Check if the scopes associated with the access token are permitted.
+        if scopes and set(scopes).issubset(token['scope']) is False:
+            logger.info('Token is valid but does not have required scopes.')
+            return False
+        return True
 
     def is_registered(self):
         return bool(self._provider_configuration.registered_client_metadata)
@@ -218,8 +249,13 @@ class PyoidcFacade:
 
         return userinfo_response
 
-    def _token_introspection_request(self, access_token: str) -> TokenIntrospectionResponse:
-        """Make token introspection request.
+    def _introspect_token(self, access_token: str) -> TokenIntrospectionResponse:
+        """RFC 7662: Token Introspection
+        The Token Introspection extension defines a mechanism for resource
+        servers to obtain information about access tokens. With this spec,
+        resource servers can check the validity of access tokens, and find out
+        other information such as which user and which scopes are associated
+        with the token.
 
         Parameters
         ----------
