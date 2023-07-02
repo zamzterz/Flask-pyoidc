@@ -76,7 +76,7 @@ To add token-based authorization to your endpoints use the `token_auth`
 decorator. It authorizes requests to your endpoint with Bearer tokens in
 the `Authorization` header.
 
-### JWT Tokens
+### JWT
 To verify JWT tokens, decorate your endpoint with `token_auth` decorator.
 
 ```python
