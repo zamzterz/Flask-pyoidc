@@ -91,8 +91,7 @@ You can also specify scopes required by your endpoint.
 
 ```python
 @app.route('/api')
-@auth.token_auth('default',
-                 scopes_required=['read', 'write'])
+@auth.token_auth('default', scopes_required=['read', 'write'])
 def api():
     current_token_identity = auth.current_token_identity
     ...
@@ -112,6 +111,21 @@ provider_metadata = ProviderMetadata(
 
 @app.route('/api')
 @auth.token_auth('default', introspection=True)
+def api():
+    current_token_identity = auth.current_token_identity
+    ...
+```
+
+### Audience
+The `aud` (audience) claim identifies the recipients that the JWT or opaque
+token is intended for. To enforce audience, set `audience` to `True`, `False`
+by default. It will check if the recipient's client ID is in `aud` claim. The
+request will be  aborted with a `403 Forbidden` response if the client ID is
+not found in audience.
+
+```python
+@app.route('/api')
+@auth.token_auth('default', audience=True)
 def api():
     current_token_identity = auth.current_token_identity
     ...
@@ -142,11 +156,12 @@ def api():
     ...
 ```
 
-You can also set required scopes and whether to enable token introspection.
+You can also set required scopes, whether to enable token introspection and
+whether to enforce audience claim.
 
 ```python
 @auth.access_control(provider_name='default', scopes_required=['read', 'write'],
-                     introspection=True)
+                     audience=True, introspection=True)
 def api():
     if auth.current_token_identity:
         current_identity = auth.current_token_identity
