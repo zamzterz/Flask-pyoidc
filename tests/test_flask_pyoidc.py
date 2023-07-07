@@ -900,12 +900,12 @@ class TestOIDCAuthentication:
             assert flask.g.current_token_identity == token_introspection_response if introspection else \
                 access_token_claims
 
-    @pytest.mark.parametrize('exp, aud, scope, audience', [
+    @pytest.mark.parametrize('exp, aud, scope, enforce_audience', [
         (int(time.time()) - 1, ['admin', CLIENT_ID], 'read write', False),
         (int(time.time()) + 60, ['admin'], 'read write', True),
         (int(time.time()) + 60, ['admin', CLIENT_ID], 'read', False)])
     @responses.activate
-    def test_token_auth_should_raise_forbidden_if_invalid_token(self, exp, aud, scope, audience):
+    def test_token_auth_should_raise_forbidden_if_invalid_token(self, exp, aud, scope, enforce_audience):
         authn = self.init_app()
         view_mock = self.get_view_mock()
         access_token_claims = {
@@ -920,7 +920,8 @@ class TestOIDCAuthentication:
                 'Authorization': f"Bearer {signed_access_token(claims=access_token_claims)}"
             }
             with pytest.raises(Forbidden):
-                authn.token_auth(self.PROVIDER_NAME, scopes_required=['read', 'write'], audience=audience)(view_mock)()
+                authn.token_auth(self.PROVIDER_NAME, scopes_required=['read', 'write'],
+                                 enforce_audience=enforce_audience)(view_mock)()
 
     @responses.activate
     def test_access_control_should_fallback_to_oidc_auth_on_401(self):

@@ -118,14 +118,14 @@ def api():
 
 ### Audience
 The `aud` (audience) claim identifies the recipients that the JWT or opaque
-token is intended for. To enforce audience, set `audience` to `True`, `False`
-by default. It will check if the recipient's client ID is in `aud` claim. The
-request will be  aborted with a `403 Forbidden` response if the client ID is
-not found in audience.
+token is intended for. To enforce audience, set `enforce_audience` to `True`,
+`False` by default. It will check if the recipient's client ID is in `aud`
+claim. The request will be  aborted with a `403 Forbidden` response if the
+client ID is not found in audience.
 
 ```python
 @app.route('/api')
-@auth.token_auth('default', audience=True)
+@auth.token_auth('default', enforce_audience=True)
 def api():
     current_token_identity = auth.current_token_identity
     ...
@@ -156,12 +156,12 @@ def api():
     ...
 ```
 
-You can also set required scopes, whether to enable token introspection and
-whether to enforce audience claim.
+You can also set required scopes, whether to enforce audience claim and whether
+to enable token introspection.
 
 ```python
 @auth.access_control(provider_name='default', scopes_required=['read', 'write'],
-                     audience=True, introspection=True)
+                     enforce_audience=True, introspection=True)
 def api():
     if auth.current_token_identity:
         current_identity = auth.current_token_identity
