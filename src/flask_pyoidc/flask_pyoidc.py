@@ -430,9 +430,6 @@ class OIDCAuthentication:
 
             @auth.token_auth(provider_name='default', scopes_required=['read', 'write'], introspection=True)
         """
-        client = self.clients[provider_name]
-        verify = functools.partial(self._access_token_response.from_jwt, keyjar=client._client.keyjar) \
-            if not introspection else functools.partial(client._introspect_token)
 
         def token_decorator(view_func):
 
@@ -445,6 +442,11 @@ class OIDCAuthentication:
                     logger.info('Request header has no authorization field.')
                     # Abort the request if authorization field is missing.
                     flask.abort(http.HTTPStatus.UNAUTHORIZED)
+
+                client = self.clients[provider_name]
+                verify = functools.partial(self._access_token_response.from_jwt, keyjar=client._client.keyjar)
+                if introspection:
+                    verify = client._introspect_token
                 result: Union[AccessTokenResponse, "TokenIntrospectionResponse"] = verify(access_token)
                 if client._validate_token_response(token=result, scopes=scopes_required,
                                                    enforce_audience=enforce_audience):
