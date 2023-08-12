@@ -40,8 +40,10 @@ class PyoidcFacade:
                                            settings=self._provider_configuration.client_settings)
 
         provider_metadata = provider_configuration.ensure_provider_metadata(self._client)
-        self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
-                                            provider_metadata['issuer'])
+        # Should be called explicitly for "Static Provider Registration" to register the issuer.
+        if not self._client.issuer:
+            self._client.handle_provider_config(ProviderConfigurationResponse(**provider_metadata.to_dict()),
+                                                provider_metadata['issuer'])
 
         if self._provider_configuration.registered_client_metadata:
             client_metadata = self._provider_configuration.registered_client_metadata.to_dict()

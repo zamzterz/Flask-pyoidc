@@ -25,6 +25,25 @@ class TestPyoidcFacade:
                                          jwks_uri=PROVIDER_BASEURL + '/jwks')
     CLIENT_METADATA = ClientMetadata('client1', 'secret1')
 
+    @pytest.mark.parametrize('provider_config', [
+        {'issuer': PROVIDER_BASEURL, 'client_registration_info': ClientRegistrationInfo()},
+        {'provider_metadata': PROVIDER_METADATA, 'client_metadata': CLIENT_METADATA}
+    ])
+    @responses.activate
+    def test_should_handle_provider_config_with_static_and_dynamic_provider(self, provider_config):
+        provider_metadata = {
+            'issuer': self.PROVIDER_BASEURL,
+            'authorization_endpoint': self.PROVIDER_BASEURL + '/auth',
+            'jwks_uri': self.PROVIDER_BASEURL + '/jwks'
+        }
+        responses.add(responses.GET,
+                      self.PROVIDER_BASEURL + '/.well-known/openid-configuration',
+                      json=provider_metadata)
+
+        config = ProviderConfiguration(**provider_config)
+        facade = PyoidcFacade(config, REDIRECT_URI)
+        assert facade._client.issuer == self.PROVIDER_BASEURL
+
     def test_registered_client_metadata_is_forwarded_to_pyoidc(self):
         config = ProviderConfiguration(provider_metadata=self.PROVIDER_METADATA, client_metadata=self.CLIENT_METADATA)
         facade = PyoidcFacade(config, REDIRECT_URI)
