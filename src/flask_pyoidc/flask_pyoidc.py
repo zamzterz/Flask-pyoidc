@@ -118,7 +118,7 @@ class OIDCAuthentication:
         if not client.is_registered():
             self._register_client(client)
 
-        flask.session['destination'] = flask.request.url
+        flask.session['destination'] = flask.request.full_path
 
         # Use silent authentication for session refresh
         # This will not show login prompt to the user
