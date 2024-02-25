@@ -662,6 +662,21 @@ class TestOIDCAuthentication:
 
         self.assert_view_mock(logout_view_mock, result)
 
+    def test_oidc_logout_when_endpoint_name_is_provided(self):
+        authn = self.init_app()
+        # Decorator with an argument.
+        view_func1 = authn.oidc_logout(logout_view='logout1')(self.get_view_mock('logout1'))
+        self.app.add_url_rule('/logout1', 'logout1', view_func=view_func1)
+        view_func2 = authn.oidc_logout(logout_view='test.logout')(self.get_view_mock('logout2'))
+        self.app.add_url_rule('/logout2', 'test.logout', view_func=view_func2)
+        # Decorator without an argument.
+        view_func3 = authn.oidc_logout(self.get_view_mock('logout3'))
+        self.app.add_url_rule('/logout3', 'logout3', view_func=view_func3)
+
+        with self.app.app_context():
+            assert authn._get_urls_for_logout_views() == [f'http://{self.CLIENT_DOMAIN}{endpoint}'
+                                                          for endpoint in ('/logout1', '/logout2', '/logout3')]
+
     def test_authentication_error_response_calls_to_error_view_if_set(self):
         state = 'test_tate'
         error_response = {'error': 'invalid_request', 'error_description': 'test error'}
