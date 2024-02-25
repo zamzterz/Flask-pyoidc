@@ -160,9 +160,22 @@ def logout():
     return "You've been successfully logged out!"
 ```
 
-If the logout view is mounted under a custom endpoint (other than the default, which is 
-[the name of the view function](https://flask.palletsprojects.com/en/2.0.x/api/#flask.Flask.route)), or if using Blueprints, you
-must specify the full URL in the Flask-pyoidc configuration using `post_logout_redirect_uris`:
+If you are using Blueprints to create routes, you can provide `logout_view` argument which takes
+[name of the view function](https://flask.palletsprojects.com/en/2.0.x/api/#flask.Flask.route) as parameter. This
+argument is used to resolve URL for `post_logout_redirect_uris`.
+```python
+from flask import Blueprint
+
+blueprint = Blueprint(name='api', import_name=__name__)
+
+@blueprint.route('/logout')
+@auth.oidc_logout(logout_view='api.logout')
+def logout():
+    return "You've been successfully logged out!"
+```
+
+`logout_view` argument is optional to provide in the decorator because you can directly specify
+`post_logout_redirect_uris` as complete URL in the Flask-pyoidc configuration:
 ```python
 ClientMetadata(..., post_logout_redirect_uris=['https://example.com/post_logout']) # if using static client registration
 ClientRegistrationInfo(..., post_logout_redirect_uris=['https://example.com/post_logout']) # if using dynamic client registration 

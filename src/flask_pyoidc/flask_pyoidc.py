@@ -90,7 +90,7 @@ class OIDCAuthentication:
 
     def _get_urls_for_logout_views(self):
         try:
-            return [url_for(view.__name__, _external=True) for view in self._logout_views]
+            return [url_for(view, _external=True) for view in self._logout_views]
         except BuildError:
             logger.error('could not build url for logout view, it might be mounted under a custom endpoint')
             raise
@@ -260,25 +260,32 @@ class OIDCAuthentication:
             return redirect(end_session_request.request(client.provider_end_session_endpoint), 303)
         return None
 
-    def oidc_logout(self, view_func):
-        self._logout_views.append(view_func)
+    def oidc_logout(self, logout_view: Optional[str] = None):
 
-        @functools.wraps(view_func)
-        def wrapper(*args, **kwargs):
-            if 'state' in flask.request.args:
-                # returning redirect from provider
-                if flask.request.args['state'] != flask.session.pop('end_session_state', None):
-                    logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
+        def logout_decorator(view_func):
+
+            @functools.wraps(view_func)
+            def wrapper(*args, **kwargs):
+                if 'state' in flask.request.args:
+                    # returning redirect from provider
+                    if flask.request.args['state'] != flask.session.pop('end_session_state', None):
+                        logger.error("Got unexpected state '%s' after logout redirect.", flask.request.args['state'])
+                    return view_func(*args, **kwargs)
+
+                post_logout_redirect_uri = flask.request.url
+                redirect_to_provider = self._logout(post_logout_redirect_uri)
+                if redirect_to_provider:
+                    return redirect_to_provider
+
                 return view_func(*args, **kwargs)
 
-            post_logout_redirect_uri = flask.request.url
-            redirect_to_provider = self._logout(post_logout_redirect_uri)
-            if redirect_to_provider:
-                return redirect_to_provider
+            return wrapper
 
-            return view_func(*args, **kwargs)
-
-        return wrapper
+        if callable(logout_view):
+            self._logout_views.append(logout_view.__name__)
+            return logout_decorator(logout_view)
+        self._logout_views.append(logout_view)
+        return logout_decorator
 
     def error_view(self, view_func):
         self._error_view = view_func
