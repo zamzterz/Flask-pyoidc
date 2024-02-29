@@ -46,7 +46,7 @@ class OIDCAuthentication:
     OIDCAuthentication object for Flask extension.
     """
 
-    def __init__(self, provider_configurations, app=None,
+    def __init__(self, provider_configurations=None, app=None,
                  redirect_uri_config=None):
         """
         Args:
@@ -72,7 +72,13 @@ class OIDCAuthentication:
         if app:
             self.init_app(app)
 
-    def init_app(self, app):
+    def init_app(self, app, provider_configurations=None):
+        if self._provider_configurations is None and provider_configurations is None:
+            raise ValueError('No provider is configured.')
+
+        if provider_configurations:
+            self._provider_configurations = provider_configurations
+
         if not self._redirect_uri_config:
             self._redirect_uri_config = RedirectUriConfig.from_config(app.config)
 
