@@ -215,7 +215,7 @@ class OIDCAuthentication:
 
     def oidc_auth(self, provider_name: str):
 
-        if provider_name not in self._provider_configurations:
+        if self._provider_configurations and provider_name not in self._provider_configurations:
             raise ValueError(
                 f"Provider name '{provider_name}' not in configured providers: {self._provider_configurations.keys()}."
             )
