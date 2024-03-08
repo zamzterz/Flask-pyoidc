@@ -75,6 +75,11 @@ class TestOIDCAuthentication:
         assert callback_mock.called
         assert result == self.CALLBACK_RETURN_VALUE
 
+    def test_lazy_init_raises_value_error_if_no_provider_configuration(self):
+        authn = OIDCAuthentication()
+        with pytest.raises(ValueError):
+            authn.init_app(app=self.app)
+
     def test_explicit_redirect_uri_config_should_be_preferred(self):
         redirect_uri_config = RedirectUriConfig('https://example.com/redirect_uri', 'redirect_uri')
         assert OIDCAuthentication({}, self.app, redirect_uri_config)._redirect_uri_config == redirect_uri_config
@@ -156,8 +161,8 @@ class TestOIDCAuthentication:
                                                           post_logout_redirect_uris=post_logout_redirect_uris
                                                       ))
         }
-        authn = OIDCAuthentication(provider_configurations)
-        authn.init_app(self.app)
+        authn = OIDCAuthentication()
+        authn.init_app(self.app, provider_configurations=provider_configurations)
 
         # register logout view to force 'post_logout_redirect_uris' to be included in registration request
         logout_view_mock = self.get_view_mock()

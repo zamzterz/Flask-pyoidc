@@ -26,7 +26,14 @@ client_metadata = ClientMetadata(
 provider_config = ProviderConfiguration(issuer='<issuer URL of provider>',
                                         client_metadata=client_metadata)
 
-auth = OIDCAuthentication({'default': provider_config}, app)
+auth = OIDCAuthentication(provider_configurations={'default': provider_config}, app=app)
+```
+
+Flask `app` and provider configurations can be also passed to `init_app`
+to initialize `auth` later.
+```python
+auth = OIDCAuthentication()
+auth.init_app(app=app, provider_configurations={'default': provider_config})
 ```
 
 You can also use a Flask application factory:
