@@ -332,7 +332,7 @@ class OIDCAuthentication:
         return access_token
 
     @staticmethod
-    def _parse_authorization_header() -> str:
+    def _parse_authorization_header() -> Optional[str]:
         """Checks for the authorization field in the request header and obtains the access token.
 
         Returns
@@ -341,7 +341,7 @@ class OIDCAuthentication:
             Access token from the request header.
         """
         if 'Authorization' in flask.request.headers and flask.request.headers['Authorization'].startswith('Bearer '):
-            _, access_token = flask.request.headers['Authorization'].split(maxsplit=1)
+            access_token = flask.request.headers['Authorization'].rsplit(maxsplit=1)[-1]
             return access_token
 
     def introspect_token(self, client: PyoidcFacade, scopes: List[str] = None, enforce_audience: bool = False,
