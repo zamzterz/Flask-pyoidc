@@ -172,13 +172,15 @@ class PyoidcFacade:
         """
         self._client.verify_id_token(id_token, auth_request)
 
-    def refresh_token(self, refresh_token: str):
+    def refresh_token(self, refresh_token: str, **kwargs):
         """Requests new tokens using a refresh token.
 
         Parameters
         ----------
         refresh_token: str
             refresh token issued to client after user authorization.
+        **kwargs : dict, optional
+            Extra arguments to pass to pyoidc (e.g., skew for clock skew tolerance).
 
         Returns
         -------
@@ -195,7 +197,8 @@ class PyoidcFacade:
         return self._client.do_access_token_refresh(request_args=request_args,
                                                     authn_method=client_auth_method,
                                                     token=Token(resp={'refresh_token': refresh_token}),
-                                                    endpoint=self._client.token_endpoint
+                                                    endpoint=self._client.token_endpoint,
+                                                    **kwargs
                                                     )
 
     def userinfo_request(self, access_token: str):

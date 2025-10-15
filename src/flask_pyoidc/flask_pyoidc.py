@@ -314,7 +314,10 @@ class OIDCAuthentication:
             return None
 
         client = self.clients[session.current_provider]
-        response = client.refresh_token(session.refresh_token)
+        extra_token_args = {}
+        if 'OIDC_CLOCK_SKEW' in current_app.config:
+            extra_token_args['skew'] = current_app.config['OIDC_CLOCK_SKEW']
+        response = client.refresh_token(session.refresh_token, **extra_token_args)
         if 'error' in response:
             logger.info('failed to refresh access token: ' + json.dumps(response.to_dict()))
             return None
